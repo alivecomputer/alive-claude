@@ -392,11 +392,23 @@ fi
 # Detect v2 patterns that need v3 upgrade
 UPGRADE_NEEDED=""
 if [ -n "$WORLD_ROOT" ]; then
+  # A directory named bundles/ is common in unrelated projects. Treat it as
+  # a v2 marker only when its parent is an identified walnut.
+  LEGACY_BUNDLES_FOUND=""
+  while IFS= read -r key_file; do
+    walnut_root="$(dirname "$(dirname "$key_file")")"
+    if [ -d "$walnut_root/bundles" ]; then
+      LEGACY_BUNDLES_FOUND="1"
+      break
+    fi
+  done < <(find "$WORLD_ROOT" -maxdepth 5 -type f \
+    \( -path "*/_kernel/key.md" -o -path "*/_core/key.md" \) \
+    -print 2>/dev/null)
+
   # Check for v2 indicators
-  if [ -d "$WORLD_ROOT/02_Life/_kernel" ] 2>/dev/null || \
-     find "$WORLD_ROOT" -maxdepth 4 -name "tasks.md" -path "*/_kernel/tasks.md" -print -quit 2>/dev/null | grep -q . || \
+  if find "$WORLD_ROOT" -maxdepth 4 -name "tasks.md" -path "*/_kernel/tasks.md" -print -quit 2>/dev/null | grep -q . || \
      find "$WORLD_ROOT" -maxdepth 4 -type d -name "_generated" -path "*/_kernel/_generated" -print -quit 2>/dev/null | grep -q . || \
-     find "$WORLD_ROOT" -maxdepth 3 -type d -name "bundles" -print -quit 2>/dev/null | grep -q . || \
+     [ -n "$LEGACY_BUNDLES_FOUND" ] || \
      [ -d "$WORLD_ROOT/People" ] 2>/dev/null || \
      [ -d "$WORLD_ROOT/03_Inputs" ] 2>/dev/null; then
     UPGRADE_NEEDED="

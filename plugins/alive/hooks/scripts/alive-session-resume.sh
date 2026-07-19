@@ -19,6 +19,9 @@ if ! find_world_or_warn "${HOOK_EVENT:-SessionStart}"; then
 fi
 
 SESSION_ID="${HOOK_SESSION_ID}"
+if [ -z "$SESSION_ID" ]; then
+  SESSION_ID=$(head -c 16 /dev/urandom 2>/dev/null | (shasum 2>/dev/null || sha256sum 2>/dev/null || md5sum 2>/dev/null || od -A n -t x1 | tr -d ' \n') | head -c 8)
+fi
 
 # fn-15-la5.6: env-file mirror parity with alive-session-new.sh. Today
 # only alive-session-new.sh writes the env-file mirror, so resumed
@@ -110,13 +113,35 @@ if(current!==expected){data.statusLine={type:'command',command:expected};fs.writ
   fi
 fi
 
-# Find squirrel entry by session_id (exact match) or fall back to most recent active
+# Resume only the exact Claude session. If its record is missing, recreate a
+# clean record rather than borrowing context from another active session.
 SQUIRRELS_DIR="$WORLD_ROOT/.alive/_squirrels"
-ENTRY=""
-if [ -n "$SESSION_ID" ] && [ -f "$SQUIRRELS_DIR/$SESSION_ID.yaml" ]; then
-  ENTRY="$SQUIRRELS_DIR/$SESSION_ID.yaml"
-elif [ -d "$SQUIRRELS_DIR" ]; then
-  ENTRY=$(grep -rl 'ended: null' "$SQUIRRELS_DIR/"*.yaml 2>/dev/null | head -1)
+mkdir -p "$SQUIRRELS_DIR"
+ENTRY="$SQUIRRELS_DIR/$SESSION_ID.yaml"
+RECOVERED_ENTRY=""
+if [ ! -f "$ENTRY" ]; then
+  TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
+  ENTRY_TMP="${ENTRY}.tmp.$$"
+  trap 'rm -f "$ENTRY_TMP"' EXIT
+  cat > "$ENTRY_TMP" << EOF
+session_id: $SESSION_ID
+runtime_id: squirrel.core@1.0
+engine: $HOOK_MODEL
+walnut: null
+started: $TIMESTAMP
+ended: null
+saves: 0
+last_saved: null
+transcript: ${HOOK_TRANSCRIPT}
+cwd: ${HOOK_CWD}
+rules_loaded: $RULE_COUNT
+tags: []
+stash: []
+working: []
+EOF
+  mv "$ENTRY_TMP" "$ENTRY"
+  trap - EXIT
+  RECOVERED_ENTRY="1"
 fi
 
 SESSION_MSG=""
@@ -135,7 +160,15 @@ if [ -n "$ENTRY" ] && [ -f "$ENTRY" ]; then
     STASH="(empty)"
   fi
 
-  SESSION_MSG="Alive session resumed. Session ID: ${ENTRY_SESSION_ID:-unknown}
+  if [ -n "$RECOVERED_ENTRY" ]; then
+    SESSION_MSG="Alive session resumed. Missing session record recreated for: ${ENTRY_SESSION_ID:-unknown}
+World: $WORLD_ROOT
+Walnut: none
+Model: $HOOK_MODEL
+$PREFS
+Rules: ${RULE_COUNT} loaded (${RULE_NAMES})"
+  else
+    SESSION_MSG="Alive session resumed. Session ID: ${ENTRY_SESSION_ID:-unknown}
 World: $WORLD_ROOT
 Walnut: ${WALNUT:-none}
 Model: $HOOK_MODEL
@@ -143,6 +176,7 @@ $PREFS
 Rules: ${RULE_COUNT} loaded (${RULE_NAMES})
 Previous stash:
 $STASH"
+  fi
 else
   SESSION_MSG="Alive session resumed. No matching entry found -- clean start.
 World: $WORLD_ROOT
