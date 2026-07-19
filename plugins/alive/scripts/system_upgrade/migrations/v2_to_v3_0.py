@@ -1285,9 +1285,23 @@ def _resolve_walnuts(
 
 
 def _looks_like_v2_walnut(path: str) -> bool:
-    """True iff *path* carries any v2-walnut marker."""
-    return (
+    """True iff *path* has walnut identity and a v2 layout marker.
+
+    A generic project directory named ``bundles`` is not enough. The
+    fallback path is used without a DetectionReport, so it must fail closed
+    before any move operation is planned.
+    """
+    has_identity = (
+        os.path.isfile(os.path.join(path, "_kernel", "key.md"))
+        or os.path.isfile(os.path.join(path, "_core", "key.md"))
+        or all(
+            os.path.isfile(os.path.join(path, name))
+            for name in ("companion.md", "now.md", "tasks.md")
+        )
+    )
+    has_v2_marker = (
         os.path.isdir(os.path.join(path, "_core"))
         or os.path.isdir(os.path.join(path, "_kernel", "_generated"))
         or os.path.isdir(os.path.join(path, "bundles"))
     )
+    return has_identity and has_v2_marker
