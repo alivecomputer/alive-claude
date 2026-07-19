@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import importlib.util
+import re
 import subprocess
 import sys
 import tempfile
@@ -21,6 +23,19 @@ SEEDED_WALNUT = (
     / "04_Ventures"
     / "nova-station"
 )
+
+
+def load_log_module():
+    path = ROOT / "plugins" / "alive" / "scripts" / "log.py"
+    spec = importlib.util.spec_from_file_location("alive_log_cli", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"could not load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+ALIVE_LOG = load_log_module()
 
 
 def run_tasks(*arguments: str) -> list[dict[str, object]]:
@@ -159,6 +174,50 @@ class CompletedTaskListingRegressionTest(unittest.TestCase):
             self.assertEqual(
                 (walnut / "_kernel" / "completed.json").read_bytes(), original
             )
+
+
+class LogIntegrityRegressionTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.original = (SEEDED_WALNUT / "_kernel" / "log.md").read_text(
+            encoding="utf-8"
+        )
+        self.envelope, self.rest = ALIVE_LOG._split_frontmatter(self.original)
+        self.old_entry_count = ALIVE_LOG._find_entry_count(self.envelope)
+
+    def compute(self, summary: str = "Regression probe") -> str:
+        return ALIVE_LOG._compute_new_log(
+            self.envelope,
+            self.rest,
+            self.old_entry_count + 1,
+            "2026-07-20T00:00:00+00:00",
+            summary,
+            "deadbeef",
+            "Recorded a bounded regression probe.",
+            "feedface",
+        )
+
+    def test_prepend_preserves_previous_log_remainder_byte_for_byte(self) -> None:
+        before_headings = re.findall(r"^## ", self.rest, flags=re.MULTILINE)
+
+        rewritten = self.compute()
+
+        self.assertTrue(rewritten.endswith(self.rest))
+        self.assertEqual(
+            len(re.findall(r"^## ", rewritten, flags=re.MULTILINE)),
+            len(before_headings) + 1,
+        )
+
+    def test_summary_is_single_line_escaped_and_has_no_save_count(self) -> None:
+        rewritten = self.compute('Line "quoted" \\ path\nsecond line')
+        envelope, _rest = ALIVE_LOG._split_frontmatter(rewritten)
+        summary_lines = [line for line in envelope if line.startswith("summary:")]
+
+        self.assertEqual(len(summary_lines), 1)
+        self.assertIn(r'\"quoted\"', summary_lines[0])
+        self.assertIn(r"\\ path", summary_lines[0])
+        self.assertIn(r"\nsecond line", summary_lines[0])
+        self.assertNotIn("\n", summary_lines[0])
+        self.assertFalse(any("save-count" in line for line in envelope))
 
 
 if __name__ == "__main__":
