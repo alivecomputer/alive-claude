@@ -1069,12 +1069,16 @@ def cmd_list(args):
     # Collect tasks across all target walnuts
     all_tasks = []
     for wp in walnut_paths:
-        tasks = _collect_all_tasks(wp)
+        if args.status in ("done", "dropped"):
+            completed_path = os.path.join(wp, "_kernel", "completed.json")
+            completed_data = _read_json(completed_path, "completed")
+            tasks = completed_data["completed"]
+        else:
+            tasks = _collect_all_tasks(wp)
         if world:
             # Add walnut attribution for cross-walnut results
             walnut_name = os.path.relpath(wp, world)
-            for t in tasks:
-                t["walnut"] = walnut_name
+            tasks = [dict(t, walnut=walnut_name) for t in tasks]
         all_tasks.extend(tasks)
 
     # Apply filters
