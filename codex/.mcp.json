@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "alive": {
+      "command": "bash",
+      "args": ["${PLUGIN_ROOT}/mcp/run.sh"]
+    }
+  }
+}

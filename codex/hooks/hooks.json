@@ -1,0 +1,127 @@
+{
+  "description": "ALIVE v3.3 lifecycle assistance for trusted Codex plugin hooks.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-session-start.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking for an ALIVE world"
+          }
+        ]
+      },
+      {
+        "matcher": "resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-session-resume.sh\"",
+            "timeout": 10,
+            "statusMessage": "Recovering ALIVE orientation"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|exec_command|apply_patch|functions\\.exec_command|functions\\.apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-log-guardian.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-rules-guardian.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-root-guardian.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-archive-enforcer.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|exec_command|apply_patch|functions\\.exec_command|functions\\.apply_patch|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-post-write.sh\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-inbox-check.sh\"",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-stash-persist.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-pre-compact.sh\"",
+            "timeout": 10,
+            "statusMessage": "Recording ALIVE recovery state"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-post-compact.sh\"",
+            "timeout": 10,
+            "statusMessage": "Restoring ALIVE orientation"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-context-watch.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$PLUGIN_ROOT/hooks/scripts/alive-stop.sh\"",
+            "timeout": 10,
+            "statusMessage": "Recording ALIVE recovery state"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,37 @@
+name:
+outcome:
+species: outcome  # outcome | evergreen
+phase: draft  # draft | prototype | published | done
+sensitivity: private  # open | private | restricted
+version: 0.1
+due:  # optional — ISO date. Bundle-scoped tasks can inherit this deadline.
+
+description:
+author:
+tags: []
+price: free
+license: MIT
+
+installs:
+  skills: []
+  hooks: []
+  templates: []
+
+tasks_total: 0
+tasks_done: 0
+tasks_created:
+
+context_routes:
+  people: true
+  insights: true
+  decisions: true
+
+discovered:
+  people: []
+  links: []
+  passes: 0
+  last_pass:
+
+observations: []
+
+creates: []

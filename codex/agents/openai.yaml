@@ -1,0 +1,17 @@
+# GPT-5-Codex agent policy overrides for ALIVE skills.
+#
+# allow_implicit_invocation: false means the skill will only run when the
+# human explicitly invokes it. GPT-5 has been observed to trigger skills
+# inadvertently from implicit cues, which is unsafe for the listed skills
+# below because they write log entries, scaffold new walnut directories,
+# or migrate file formats.
+skills:
+  alive-save:
+    policy:
+      allow_implicit_invocation: false
+  alive-create-walnut:
+    policy:
+      allow_implicit_invocation: false
+  alive-system-upgrade:
+    policy:
+      allow_implicit_invocation: false

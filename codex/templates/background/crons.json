@@ -1,0 +1,30 @@
+{
+  "enabled": false,
+  "max_concurrent": 2,
+  "crons": [
+    {
+      "id": "inbox-route",
+      "description": "Check 03_Inbox/ for unrouted files, match to walnuts, route or flag",
+      "interval_minutes": 30,
+      "priority": 1,
+      "enabled": true,
+      "running": false,
+      "agent_id": null,
+      "dispatched_at": null,
+      "last_run": null,
+      "job_spec": "jobs/inbox-route.md"
+    },
+    {
+      "id": "system-health",
+      "description": "Stale walnuts, orphan folders, unsigned sessions, broken projections",
+      "interval_minutes": 1440,
+      "priority": 5,
+      "enabled": true,
+      "running": false,
+      "agent_id": null,
+      "dispatched_at": null,
+      "last_run": null,
+      "job_spec": "jobs/system-health.md"
+    }
+  ]
+}

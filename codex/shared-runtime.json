@@ -1,0 +1,7 @@
+{
+  "files": [
+    "scripts/generate-index.py",
+    "scripts/orientation.py"
+  ],
+  "trees": []
+}

@@ -1,0 +1,43 @@
+{
+  "name": "alive",
+  "version": "3.3.0-alpha.3",
+  "description": "Filesystem-first personal context for Codex, compatible with ALIVE v3 walnuts.",
+  "author": {
+    "name": "Lock-in Lab",
+    "url": "https://lockinlab.ai"
+  },
+  "homepage": "https://lockinlab.ai",
+  "repository": "https://github.com/alivecontext/alive",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "personal-context-manager",
+    "pcm",
+    "context",
+    "session-persistence",
+    "walnut",
+    "ai-agents"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "ALIVE Context",
+    "shortDescription": "Personal Context Manager for Codex",
+    "longDescription": "ALIVE gives Codex local, structured project context using the same filesystem walnuts as ALIVE v3. Explicit load and save workflows are supported; lifecycle assistance depends on trusted Codex hooks.",
+    "developerName": "Lock-in Lab",
+    "category": "productivity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://lockinlab.ai",
+    "privacyPolicyURL": "https://alivecontext.com/privacy",
+    "termsOfServiceURL": "https://alivecontext.com/terms",
+    "defaultPrompt": [
+      "Load my ALIVE walnut and show me what is active.",
+      "Save this session into my loaded walnut."
+    ],
+    "brandColor": "#E8720C"
+  }
+}
