@@ -59,7 +59,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 PROVIDER_SRC="$SCRIPT_DIR/memory-provider"
 PROVIDER_DIR="$HERMES_HOME/plugins/memory/alive"
-PROVIDER_FILES=(__init__.py plugin.yaml README.md)
+# Hermes <=0.18.x discovers memory plugins from the FLAT layout
+# $HERMES_HOME/plugins/<name>/ (no memory/ subdir); 0.19+ uses
+# $HERMES_HOME/plugins/memory/<name>/. Verified live 2026-08-06 against
+# the v2026.7.7.2 (v0.18.2) and v2026.8.3 (v0.20.0) images — we install
+# to the modern path and bridge the flat one with a symlink (copy when
+# symlinks are unavailable).
+PROVIDER_FLAT_LINK="$HERMES_HOME/plugins/alive"
 WORLD_ROOT=""
 HAS_ALIVE=false
 HAS_HERMES=false
@@ -97,11 +103,21 @@ echo -e "${BOLD}Layer 1: Memory Provider${RESET}"
 echo -e "  Target: $PROVIDER_DIR ${DIM}(Hermes user plugin dir)${RESET}"
 
 mkdir -p "$PROVIDER_DIR" || fail "could not create $PROVIDER_DIR"
-for f in "${PROVIDER_FILES[@]}"; do
-    [ -f "$PROVIDER_SRC/$f" ] || fail "missing source file: $PROVIDER_SRC/$f"
-    cp "$PROVIDER_SRC/$f" "$PROVIDER_DIR/$f" || fail "could not copy $f to $PROVIDER_DIR"
+# Copy every provider source file (dynamic — the provider grows modules;
+# a hardcoded list silently ships a broken install).
+found_py=false
+for f in "$PROVIDER_SRC"/*.py "$PROVIDER_SRC"/plugin.yaml "$PROVIDER_SRC"/README.md; do
+    [ -f "$f" ] || continue
+    case "$f" in *.py) found_py=true ;; esac
+    cp "$f" "$PROVIDER_DIR/$(basename "$f")" || fail "could not copy $(basename "$f") to $PROVIDER_DIR"
 done
-echo -e "  ${GREEN}✓${RESET} Memory provider installed"
+$found_py || fail "no provider .py sources found in $PROVIDER_SRC"
+if [ ! -e "$PROVIDER_FLAT_LINK" ]; then
+    ln -s "$PROVIDER_DIR" "$PROVIDER_FLAT_LINK" 2>/dev/null \
+        || cp -r "$PROVIDER_DIR" "$PROVIDER_FLAT_LINK" \
+        || fail "could not create 0.18.x-compat plugin path $PROVIDER_FLAT_LINK"
+fi
+echo -e "  ${GREEN}✓${RESET} Memory provider installed (modern + 0.18.x-compat paths)"
 
 # Warn about the legacy (wrong) install location from earlier versions.
 LEGACY_DIR="$HERMES_HOME/hermes-agent/plugins/memory/alive"
