@@ -109,10 +109,6 @@ hermes/
   README.md                  <- This file
 ```
 
-## Design Spec
-
-Full 14-page specification: see `alive-hermes-spec.pdf` in the alivecomputer walnut's hermes-plugin bundle.
-
 ## Links
 
 - [ALIVE Context System](https://github.com/alivecontext/alive)
