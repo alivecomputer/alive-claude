@@ -283,12 +283,20 @@ class TestInstall:
         # The stub was actually asked.
         assert ["plugins", "list"] in stub_calls(env)
 
-    def test_verification_fails_loudly_when_plugin_not_listed(self, env):
+    def test_missing_plugins_list_row_warns_but_succeeds(self, env):
+        # Memory providers have their own discovery system and may not appear
+        # in the general plugins table — a missing row must not fail the
+        # install; the authoritative check is `hermes memory status`.
         env = dict(env, HERMES_STUB_PLUGINS_OUTPUT="mem0    memory-provider    enabled")
-        result = run(INSTALL, env=env)
-        assert result.returncode != 0
-        assert "does not show the alive plugin" in result.stdout
-        assert "verification failed" in result.stderr
+        result = run(INSTALL, env=env, check=True)
+        assert "does not show an 'alive' row" in result.stdout
+        assert "hermes memory setup" in result.stdout
+
+    def test_plugins_list_match_requires_a_whole_word(self, env):
+        # 'keepalive' must not count as an 'alive' row.
+        env = dict(env, HERMES_STUB_PLUGINS_OUTPUT="keepalive    watchdog    enabled")
+        result = run(INSTALL, env=env, check=True)
+        assert "does not show an 'alive' row" in result.stdout
 
     def test_no_world_scaffold_unless_requested(self, env):
         run(INSTALL, env=env, check=True)

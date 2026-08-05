@@ -272,22 +272,21 @@ for f in "${PROVIDER_FILES[@]}"; do
 done
 
 if $HAS_HERMES; then
-    if PLUGINS_OUT=$(hermes plugins list 2>&1); then
-        if echo "$PLUGINS_OUT" | grep -qi "alive"; then
-            echo -e "  ${GREEN}✓${RESET} 'hermes plugins list' reports the alive plugin"
-        else
-            echo -e "  ${RED}✗${RESET} 'hermes plugins list' does not show the alive plugin"
-            echo -e "    ${DIM}Expected an 'alive' row after installing to $PROVIDER_DIR${RESET}"
-            VERIFY_FAILED=true
-        fi
+    # Memory providers have their own discovery system (kind: exclusive) and
+    # may be listed separately from general plugins — a missing row in
+    # 'hermes plugins list' is not proof the install failed, so it warns
+    # instead of failing. The authoritative check is 'hermes memory status'
+    # after activating the provider with 'hermes memory setup'.
+    if PLUGINS_OUT=$(hermes plugins list 2>&1) && echo "$PLUGINS_OUT" | grep -qiw "alive"; then
+        echo -e "  ${GREEN}✓${RESET} 'hermes plugins list' reports the alive plugin"
     else
-        echo -e "  ${RED}✗${RESET} 'hermes plugins list' failed:"
-        echo "$PLUGINS_OUT" | sed 's/^/      /'
-        VERIFY_FAILED=true
+        echo -e "  ${YELLOW}○${RESET} 'hermes plugins list' does not show an 'alive' row"
+        echo -e "    ${DIM}Memory providers can be listed separately from general plugins;${RESET}"
+        echo -e "    ${DIM}confirm with: hermes memory setup  →  expect 'alive' as an option${RESET}"
     fi
 
     # Recall round-trip: is alive the active provider yet?
-    if MEMORY_OUT=$(hermes memory status 2>&1) && echo "$MEMORY_OUT" | grep -qi "alive"; then
+    if MEMORY_OUT=$(hermes memory status 2>&1) && echo "$MEMORY_OUT" | grep -qiw "alive"; then
         echo -e "  ${GREEN}✓${RESET} 'hermes memory status' reports alive as the active provider"
     else
         echo -e "  ${YELLOW}○${RESET} alive is not the active memory provider yet"
@@ -296,8 +295,9 @@ if $HAS_HERMES; then
 else
     echo -e "  ${YELLOW}!${RESET} WARNING: hermes binary not found — live verification skipped."
     echo "    After installing Hermes, verify with:"
-    echo "      hermes plugins list      # expect an 'alive' row"
     echo "      hermes memory setup      # select 'alive' to activate"
+    echo "      hermes memory status     # expect 'alive' as the active provider"
+    echo "      hermes plugins list      # may show 'alive' (providers can be listed separately)"
 fi
 
 if $VERIFY_FAILED; then

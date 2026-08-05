@@ -46,8 +46,9 @@ export ALIVE_WORLD_ROOT=~/world                              # your world
 export ALIVE_PLUGIN_ROOT=/path/to/alivecontext/alive/plugins/alive
 
 # 4. Activate memory provider
-hermes memory setup  # select "alive"
-hermes plugins list  # verify: expect an "alive" row
+hermes memory setup   # select "alive"
+hermes memory status  # verify: expect "alive" as the active provider
+hermes plugins list   # may show "alive" (memory providers can be listed separately)
 
 # 5. Install crons (optional) — dry run first, then apply
 bash hermes/setup-crons.sh          # prints the commands
