@@ -241,6 +241,42 @@ class TestInstall:
         soul = (hermes_home / "SOUL.md").read_text()
         assert soul.count("squirrel") == 1
 
+    def test_existing_skills_section_is_left_untouched(self, env):
+        # A real-world config with a top-level skills: key but no
+        # external_dirs (e.g. skills.write_approval). Appending a second
+        # `skills:` key would produce duplicate-key YAML — last-wins loaders
+        # silently drop the user's settings, strict loaders refuse to start.
+        hermes_home = Path(env["HERMES_HOME"])
+        hermes_home.mkdir(parents=True)
+        original = "model: something\nskills:\n  write_approval: true\n"
+        (hermes_home / "config.yaml").write_text(original)
+
+        result = run(INSTALL, env=env, check=True)
+
+        assert (hermes_home / "config.yaml").read_text() == original
+        assert "add these paths to skills.external_dirs manually" in result.stdout
+
+    def test_moved_checkout_does_not_append_a_second_skills_block(self, env):
+        # First run appends the skills: block with absolute paths. If the
+        # checkout later moves, the literal-path guard no longer matches —
+        # the `^skills:` guard must still prevent a second append.
+        hermes_home = Path(env["HERMES_HOME"])
+        hermes_home.mkdir(parents=True)
+        config_path = hermes_home / "config.yaml"
+        config_path.write_text("model: something\n")
+        run(INSTALL, env=env, check=True)
+        config = config_path.read_text()
+        assert config.count("skills:") == 1
+        moved = config.replace(str(HERMES_DIR), "/somewhere/else/hermes")
+        assert moved != config
+        config_path.write_text(moved)
+
+        run(INSTALL, env=env, check=True)
+
+        after = config_path.read_text()
+        assert after == moved
+        assert after.count("skills:") == 1
+
     def test_verification_passes_when_plugin_listed(self, env):
         result = run(INSTALL, env=env, check=True)
         assert "reports the alive plugin" in result.stdout

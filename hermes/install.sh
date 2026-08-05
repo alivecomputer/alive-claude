@@ -122,8 +122,11 @@ HERMES_CONFIG="$HERMES_HOME/config.yaml"
 
 if [ -f "$HERMES_CONFIG" ] && grep -qF "$SKILLS_DIR" "$HERMES_CONFIG" 2>/dev/null; then
     echo -e "  ${GREEN}✓${RESET} config.yaml already points at the ALIVE skill directories"
-elif [ -f "$HERMES_CONFIG" ] && grep -q "external_dirs" "$HERMES_CONFIG" 2>/dev/null; then
-    echo -e "  ${YELLOW}○${RESET} config.yaml already defines skills.external_dirs — add these paths to it manually:"
+elif [ -f "$HERMES_CONFIG" ] && grep -qE '^skills:|external_dirs' "$HERMES_CONFIG" 2>/dev/null; then
+    # Never append a second top-level `skills:` key: duplicate keys are
+    # silently last-wins on some YAML loaders (discarding the user's existing
+    # skills settings) and a hard startup error on others.
+    echo -e "  ${YELLOW}○${RESET} config.yaml already has a skills: section — add these paths to skills.external_dirs manually:"
     echo -e "    ${DIM}- $SKILLS_DIR${RESET}"
     echo -e "    ${DIM}- $CRONS_DIR${RESET}"
 elif [ -f "$HERMES_CONFIG" ]; then
