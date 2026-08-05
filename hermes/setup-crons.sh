@@ -1,85 +1,145 @@
 #!/usr/bin/env bash
 # ALIVE x Hermes -- Cron Setup
-# Creates all 8 ALIVE cron templates in Hermes Agent.
-# Run: bash setup-crons.sh [deliver_target]
-# Default deliver: telegram (change to "local" for testing)
+#
+# Emits the `hermes cron create` commands for the ALIVE cron templates.
+# DRY RUN by default: the commands are printed to stdout and nothing is
+# executed. Pass --apply to actually create the jobs.
+#
+# Usage: bash setup-crons.sh [--apply] [--deliver TARGET] [--core-only]
+#
+#   --apply            Execute the `hermes cron create` calls
+#                      (default: dry run -- print the commands only)
+#   --deliver TARGET   Delivery target for user-facing jobs (default: local).
+#                      Keep "local" until you have watched a few runs, then
+#                      re-create with telegram/discord/slack if wanted --
+#                      eight chatty jobs on a paired channel is a lot of noise.
+#   --core-only        Install only the 5 core jobs, skip the 3 optional ones
+#   -h, --help         Show this help
+#
+# Core jobs (the compound loop): alive-morning, alive-project, alive-inbox,
+# alive-stash-router, alive-mine. Optional jobs (nudges that overlap the
+# morning briefing): alive-health, alive-prune, alive-people.
+#
+# Maintenance jobs (alive-project, alive-mine) always deliver locally.
+#
+# Prerequisite -- the cron-template skills must be on Hermes' skill path:
+#   # ~/.hermes/config.yaml
+#   skills:
+#     external_dirs:
+#       - <path-to-alive>/hermes/cron-templates
 
 set -euo pipefail
 
-DELIVER="${1:-telegram}"
+usage() {
+  sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'
+}
+
+APPLY=false
+DELIVER="local"
+CORE_ONLY=false
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --apply) APPLY=true ;;
+    --deliver)
+      shift
+      [ $# -gt 0 ] || { echo "error: --deliver needs a target" >&2; exit 2; }
+      DELIVER="$1"
+      ;;
+    --deliver=*) DELIVER="${1#--deliver=}" ;;
+    --core-only) CORE_ONLY=true ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      echo "error: unknown argument: $1" >&2
+      echo "usage: bash setup-crons.sh [--apply] [--deliver TARGET] [--core-only]" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+HERMES_BIN="${HERMES_BIN:-hermes}"
 SKILL_DIR="$(cd "$(dirname "$0")/cron-templates" && pwd)"
+CREATED=0
 
-echo "ALIVE x Hermes -- Installing cron templates"
-echo "Delivery target: $DELIVER"
-echo "Skill directory: $SKILL_DIR"
-echo ""
+# Single-quote a string for display in dry-run output.
+sq() {
+  local s=$1
+  printf "'%s'" "${s//\'/\'\\\'\'}"
+}
 
-# Ensure external_dirs includes our cron-templates
-echo "Add this to ~/.hermes/config.yaml if not already present:"
-echo "  skills:"
-echo "    external_dirs:"
-echo "      - $SKILL_DIR"
-echo ""
+# create_cron NAME SKILL SCHEDULE DELIVER PROMPT
+create_cron() {
+  local name=$1 skill=$2 schedule=$3 deliver=$4 prompt=$5
+  if ! $APPLY; then
+    printf '%s cron create %s %s --name %s --skill %s --deliver %s\n' \
+      "$HERMES_BIN" "$(sq "$schedule")" "$(sq "$prompt")" \
+      "$(sq "$name")" "$(sq "$skill")" "$(sq "$deliver")"
+    return 0
+  fi
+  if ! "$HERMES_BIN" cron create "$schedule" "$prompt" \
+      --name "$name" --skill "$skill" --deliver "$deliver"; then
+    echo "error: 'hermes cron create' failed for job '$name' (skill: $skill)" >&2
+    echo "Aborting -- $CREATED job(s) were created before the failure." >&2
+    exit 1
+  fi
+  CREATED=$((CREATED + 1))
+  echo "  [+] $name" >&2
+}
 
-# Create crons
-echo "Creating cron jobs..."
+{
+  echo "ALIVE x Hermes -- cron setup"
+  echo "Mode:     $($APPLY && echo apply || echo 'dry run (nothing executed; re-run with --apply)')"
+  echo "Delivery: $DELIVER (maintenance jobs always deliver locally)"
+  echo ""
+  echo "The cron-template skills must be on Hermes' skill path first:"
+  echo "  # ~/.hermes/config.yaml"
+  echo "  skills:"
+  echo "    external_dirs:"
+  echo "      - $SKILL_DIR"
+  echo ""
+} >&2
 
-hermes cron create \
-  --schedule "0 7 * * *" \
-  --prompt "Run the alive-morning skill. Read all walnut now.json files, calculate health, surface priorities." \
-  --name "ALIVE Morning Briefing" \
-  --skill alive-morning \
-  --deliver "$DELIVER" && echo "  [+] alive-morning (7am daily)" || echo "  [!] alive-morning failed"
+# ── Core jobs (the compound loop) ───────────────────────────────
 
-hermes cron create \
-  --schedule "every 4h" \
-  --prompt "Run the alive-project skill. Regenerate now.json projections for all walnuts." \
-  --name "ALIVE Projection" \
-  --skill alive-project \
-  --deliver local && echo "  [+] alive-project (every 4h, local)" || echo "  [!] alive-project failed"
+create_cron "ALIVE Morning Briefing" alive-morning "0 7 * * *" "$DELIVER" \
+  "Run the alive-morning skill. Read all walnut now.json files, calculate health, surface priorities."
 
-hermes cron create \
-  --schedule "every 2h" \
-  --prompt "Run the alive-inbox skill. Scan 03_Inbox/ for unrouted files." \
-  --name "ALIVE Inbox Scanner" \
-  --skill alive-inbox \
-  --deliver "$DELIVER" && echo "  [+] alive-inbox (every 2h)" || echo "  [!] alive-inbox failed"
+create_cron "ALIVE Projection" alive-project "every 4h" local \
+  "Run the alive-project skill. Regenerate now.json projections for all walnuts."
 
-hermes cron create \
-  --schedule "0 9 * * *" \
-  --prompt "Run the alive-health skill. Flag walnuts past their rhythm." \
-  --name "ALIVE Health Check" \
-  --skill alive-health \
-  --deliver "$DELIVER" && echo "  [+] alive-health (9am daily)" || echo "  [!] alive-health failed"
+create_cron "ALIVE Inbox Scanner" alive-inbox "every 2h" "$DELIVER" \
+  "Run the alive-inbox skill. Scan 03_Inbox/ for unrouted files."
 
-hermes cron create \
-  --schedule "every 4h" \
-  --prompt "Run the alive-stash-router skill. Present pending stash items for routing." \
-  --name "ALIVE Stash Router" \
-  --skill alive-stash-router \
-  --deliver "$DELIVER" && echo "  [+] alive-stash-router (every 4h)" || echo "  [!] alive-stash-router failed"
+create_cron "ALIVE Stash Router" alive-stash-router "every 4h" "$DELIVER" \
+  "Run the alive-stash-router skill. Present pending stash items for routing."
 
-hermes cron create \
-  --schedule "0 2 * * *" \
-  --prompt "Run the alive-mine skill. Scan recent session transcripts for context." \
-  --name "ALIVE Nightly Mine" \
-  --skill alive-mine \
-  --deliver local && echo "  [+] alive-mine (2am nightly, local)" || echo "  [!] alive-mine failed"
+create_cron "ALIVE Nightly Mine" alive-mine "0 2 * * *" local \
+  "Run the alive-mine skill. Scan recent session transcripts for context."
 
-hermes cron create \
-  --schedule "0 3 * * 0" \
-  --prompt "Run the alive-prune skill. Suggest log chapters and flag stale insights." \
-  --name "ALIVE Weekly Prune" \
-  --skill alive-prune \
-  --deliver "$DELIVER" && echo "  [+] alive-prune (3am Sunday)" || echo "  [!] alive-prune failed"
+# ── Optional jobs (skipped with --core-only) ────────────────────
 
-hermes cron create \
-  --schedule "0 9 * * 1" \
-  --prompt "Run the alive-people skill. Check stale contacts and cross-reference people mentions." \
-  --name "ALIVE People Check" \
-  --skill alive-people \
-  --deliver "$DELIVER" && echo "  [+] alive-people (9am Monday)" || echo "  [!] alive-people failed"
+if ! $CORE_ONLY; then
+  create_cron "ALIVE Health Check" alive-health "0 9 * * *" "$DELIVER" \
+    "Run the alive-health skill. Flag walnuts past their rhythm."
 
-echo ""
-echo "Done. Run 'hermes cron list' to verify."
-echo "Run 'hermes cron tick' to test immediate execution."
+  create_cron "ALIVE Weekly Prune" alive-prune "0 3 * * 0" "$DELIVER" \
+    "Run the alive-prune skill. Suggest log chapters and flag stale insights."
+
+  create_cron "ALIVE People Check" alive-people "0 9 * * 1" "$DELIVER" \
+    "Run the alive-people skill. Check stale contacts and cross-reference people mentions."
+else
+  echo "(--core-only: skipping optional jobs alive-health, alive-prune, alive-people)" >&2
+fi
+
+{
+  echo ""
+  if $APPLY; then
+    echo "Done -- created $CREATED job(s)."
+    echo "Verify: hermes cron list"
+    echo "Test an immediate run: hermes cron tick"
+  else
+    echo "Dry run complete -- no jobs were created."
+    echo "Review the commands above, then re-run with --apply."
+  fi
+} >&2
