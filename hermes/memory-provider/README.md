@@ -8,8 +8,13 @@ ALIVE gives your Hermes Agent structured persistent memory through *walnuts* -- 
 
 1. Install the ALIVE system: `claude plugin install alive@alivecontext`
 2. Set up your world (or use an existing one)
-3. In Hermes: `hermes memory setup` -> select `alive`
-4. Set `ALIVE_WORLD_ROOT` to your world path (or it auto-detects `~/world`)
+3. Copy this directory into the Hermes **user plugin dir**:
+   `~/.hermes/plugins/memory/alive/` (or run `bash hermes/install.sh`,
+   which also verifies the result). This path is scanned on every Hermes
+   install method and survives upgrades -- do not copy into the
+   `~/.hermes/hermes-agent/` repo checkout.
+4. In Hermes: `hermes memory setup` -> select `alive`
+5. Set `ALIVE_WORLD_ROOT` to your world path (or it auto-detects `~/world`)
 
 ## What It Does
 

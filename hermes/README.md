@@ -9,18 +9,30 @@ Structured context layer for autonomous agents. Five independent layers that com
 | 4 | Runtime Integration | `soul-patch.md` + `agents.md`. Auto-discovered by Hermes. |
 | 3 | Cron Templates | 8 background jobs. Observe, present, await approval. |
 | 2 | Hermes Skills | 11 ALIVE operations as `/slash` commands. agentskills.io format. |
-| 1 | Memory Provider | Smart prefetch, 3 tools. PR to NousResearch/hermes-agent. |
+| 1 | Memory Provider | Smart prefetch, 3 tools. Installs into the Hermes user plugin dir (`~/.hermes/plugins/memory/alive/`). |
 | 0 | The World | Walnuts, bundles, `_kernel/`, `.alive/`. The shared filesystem. |
 
 Each layer works independently. A user on Mem0 can use ALIVE skills and crons without the memory provider.
 
 ## Quick Start
 
-### Path A: You already have ALIVE (Claude Code user)
+The installer does all of this, verifies the result, and prints the env contract:
 
 ```bash
-# 1. Copy memory provider to Hermes
-cp -r hermes/memory-provider/* ~/.hermes/hermes-agent/plugins/memory/alive/
+bash hermes/install.sh
+```
+
+### Path A: You already have ALIVE (Claude Code user)
+
+Manual steps, if you prefer them over `install.sh`:
+
+```bash
+# 1. Copy memory provider into the Hermes *user plugin dir*
+#    (update-safe on every install method; do NOT use the
+#    ~/.hermes/hermes-agent/ repo checkout — it only exists on git
+#    installs and is never scanned on the others)
+mkdir -p ~/.hermes/plugins/memory/alive
+cp -r hermes/memory-provider/* ~/.hermes/plugins/memory/alive/
 
 # 2. Add skills to Hermes config
 # In ~/.hermes/config.yaml:
@@ -29,16 +41,22 @@ cp -r hermes/memory-provider/* ~/.hermes/hermes-agent/plugins/memory/alive/
 #     - /path/to/alivecontext/alive/hermes/hermes-skills
 #     - /path/to/alivecontext/alive/hermes/cron-templates
 
-# 3. Activate memory provider
+# 3. Set the runtime env contract (wherever Hermes starts from)
+export ALIVE_WORLD_ROOT=~/world                              # your world
+export ALIVE_PLUGIN_ROOT=/path/to/alivecontext/alive/plugins/alive
+
+# 4. Activate memory provider
 hermes memory setup  # select "alive"
+hermes plugins list  # verify: expect an "alive" row
 
-# 4. Install crons (optional)
-bash hermes/setup-crons.sh
+# 5. Install crons (optional) — dry run first, then apply
+bash hermes/setup-crons.sh          # prints the commands
+bash hermes/setup-crons.sh --apply  # creates the jobs (deliver: local)
 
-# 5. Append SOUL.md patch
+# 6. Append SOUL.md patch
 cat hermes/soul-patch.md >> ~/.hermes/SOUL.md
 
-# 6. Copy AGENTS.md to world root
+# 7. Copy AGENTS.md to world root
 cp hermes/agents.md ~/world/AGENTS.md
 ```
 
@@ -85,7 +103,8 @@ hermes/
 
   agents.md                  <- Layer 4: Squirrel runtime rules
   soul-patch.md              <- Layer 4: 3-line personality patch
-  setup-crons.sh             <- Installs all 8 crons in Hermes
+  install.sh                 <- Installer: user plugin dir + verification
+  setup-crons.sh             <- Emits the 8 cron jobs (dry run; --apply)
   README.md                  <- This file
 ```
 
