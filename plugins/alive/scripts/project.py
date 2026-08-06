@@ -24,6 +24,29 @@ from _common import atomic_write_json  # noqa: E402
 from _common import find_world_root as _common_find_world_root  # noqa: E402
 
 
+PHASE_KEYWORDS = {
+    "launching": r"\blaunch(?:ing|ed)?\b",
+    "building": r"\bbuilding\b",
+    "planning": r"\bplanning\b",
+    "research": r"\bresearch(?:ing)?\b",
+    "designing": r"\bdesign(?:ing|ed)?\b",
+    "shipping": r"\bshipp(?:ing|ed)\b",
+    "maintaining": r"\bmaintain(?:ing)?\b",
+    "paused": r"\bpaused?\b",
+}
+
+KNOWN_PHASES = set(PHASE_KEYWORDS) | {
+    "starting",
+    "testing",
+    "launched",
+    "draft",
+    "prototype",
+    "published",
+    "done",
+    "active",
+}
+
+
 # ---------------------------------------------------------------------------
 # 1. Log Parser
 # ---------------------------------------------------------------------------
@@ -122,22 +145,17 @@ def parse_log(walnut):
 
     # Extract phase
     phase = "unknown"
-    phase_match = re.search(r"phase:\s*(.+)", entry_text, re.IGNORECASE)
-    if phase_match:
-        phase = phase_match.group(1).strip()
+    phase_match = re.search(
+        r"^\s*phase:\s*([A-Za-z][A-Za-z0-9_-]*)\s*$",
+        entry_text,
+        re.IGNORECASE | re.MULTILINE,
+    )
+    structured_phase = phase_match.group(1).lower() if phase_match else None
+    if structured_phase in KNOWN_PHASES:
+        phase = structured_phase
     else:
         # Look for phase-like words in the narrative
-        phase_keywords = {
-            "launching": r"\blaunch(?:ing|ed)?\b",
-            "building": r"\bbuilding\b",
-            "planning": r"\bplanning\b",
-            "research": r"\bresearch(?:ing)?\b",
-            "designing": r"\bdesign(?:ing|ed)?\b",
-            "shipping": r"\bshipp(?:ing|ed)\b",
-            "maintaining": r"\bmaintain(?:ing)?\b",
-            "paused": r"\bpaused?\b",
-        }
-        for pname, ppat in phase_keywords.items():
+        for pname, ppat in PHASE_KEYWORDS.items():
             if re.search(ppat, entry_text, re.IGNORECASE):
                 phase = pname
                 break

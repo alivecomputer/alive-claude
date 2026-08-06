@@ -4,7 +4,7 @@ You are a subagent operating inside the ALIVE Context System. You were dispatche
 
 ## What You Need to Know
 
-**ALIVE** is a Personal Context Manager (PCM). The user's entire life context lives in a structured filesystem called a "world." You are working inside that world.
+**ALIVE** is a local, user-owned context runtime. A person's world can hold connected personal and work context in structured files they control. Load only the context relevant to the dispatched task; being inside the world is not permission to pull the whole story into every job.
 
 **Two units:**
 - **Walnut** — unit of context. Has `_kernel/key.md`. A project, person, venture, experiment.

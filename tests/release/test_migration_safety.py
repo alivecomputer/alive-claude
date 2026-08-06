@@ -11,6 +11,7 @@ SCRIPTS = ROOT / "plugins" / "alive" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from system_upgrade.migrations import v2_to_v3_0  # noqa: E402
+from system_upgrade.cleanup import build_cleanup_plan  # noqa: E402
 
 
 class MigrationFallbackSafetyTest(unittest.TestCase):
@@ -42,6 +43,18 @@ class MigrationFallbackSafetyTest(unittest.TestCase):
         discovered = v2_to_v3_0._resolve_walnuts(str(self.world), None)
 
         self.assertEqual(discovered, [str(legacy)])
+
+    def test_upgrade_cleanup_preserves_canonical_rule_overrides(self) -> None:
+        overrides = self.world / ".alive" / "overrides.md"
+        overrides.parent.mkdir()
+        overrides.write_text("# Overrides\n\n- Keep this rule.\n", encoding="utf-8")
+
+        plan = build_cleanup_plan(str(self.world.resolve()))
+
+        self.assertNotIn(
+            str(overrides.resolve()),
+            [str(Path(target.absolute_path).resolve()) for target in plan],
+        )
 
 
 if __name__ == "__main__":

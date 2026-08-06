@@ -9,6 +9,21 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; t
   ALIVE_PLATFORM="windows"
 fi
 
+# Append a shell-safe assignment to Claude Code's environment handoff file.
+# The file is evaluated by the user's shell, so raw paths containing spaces,
+# quotes, or metacharacters must never be emitted as unquoted text. These hook
+# scripts run under Bash; Bash's %q output is also accepted by zsh, the default
+# shell on current macOS systems.
+alive_write_env_var() {
+  local name="$1"
+  local value="$2"
+  local env_file="$3"
+  case "$name" in
+    ''|*[!A-Za-z0-9_]*) return 1 ;;
+  esac
+  printf '%s=%q\n' "$name" "$value" >> "$env_file"
+}
+
 # -- JSON runtime detection --
 # python3 preferred (fast). node guaranteed (Claude Code is a Node app).
 # Windows ships a python3 Store stub (AppInstallerPythonRedirector.exe) that
@@ -528,6 +543,21 @@ lexical_normalize_path() {
   case "$p" in
     *$'\t'*|*$'\n'*|*$'\r'*) return 1 ;;
   esac
+
+  # Git Bash receives the config value in native Windows form because the
+  # Python resolver persists paths such as ``C:\Users\Ada\alive``. Convert
+  # that one drive-letter shape to the MSYS mount form before the POSIX
+  # absolute-path check so both resolver halves accept the same config value.
+  if [ "$ALIVE_PLATFORM" = "windows" ] \
+    && [[ "${p:0:1}" == [A-Za-z] ]] \
+    && [ "${p:1:1}" = ":" ] \
+    && { [ "${p:2:1}" = "\\" ] || [ "${p:2:1}" = "/" ]; }; then
+    local drive rest
+    drive="$(printf '%s' "${p:0:1}" | tr '[:upper:]' '[:lower:]')"
+    rest="${p:2}"
+    rest="${rest//\\//}"
+    p="/${drive}${rest}"
+  fi
 
   # ~user (any non-/ char after ~) is unsupported -- match Python.
   if [ "${p:0:1}" = "~" ]; then

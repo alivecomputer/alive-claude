@@ -44,6 +44,19 @@ class ReleaseMetadataContractTest(unittest.TestCase):
         self.assertRegex(claude, rf"(?m)^version: {re.escape(EXPECTED_VERSION)}$")
         self.assertRegex(walnut, rf'(?m)^version: "{re.escape(EXPECTED_VERSION)}"$')
 
+    def test_public_package_descriptions_use_the_current_category(self) -> None:
+        expected = "Local, user-owned context for Claude Code. Keep your work in files you control."
+        marketplace = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text())
+        plugin = json.loads(
+            (ROOT / "plugins" / "alive" / ".claude-plugin" / "plugin.json").read_text()
+        )
+        walnut = (ROOT / "walnut.manifest.yaml").read_text(encoding="utf-8")
+
+        self.assertEqual(marketplace["metadata"]["description"], expected)
+        self.assertEqual(marketplace["plugins"][0]["description"], expected)
+        self.assertEqual(plugin["description"], expected)
+        self.assertIn(f'description: "{expected}"', walnut)
+
     def test_world_schema_target_remains_3_2_0(self) -> None:
         source = (
             ROOT / "plugins" / "alive" / "scripts" / "system_upgrade" / "__init__.py"
@@ -69,6 +82,42 @@ class ReleaseMetadataContractTest(unittest.TestCase):
         for script in sorted(set(scripts)):
             self.assertIn(script, permissions)
 
+    def test_readme_documents_the_two_step_install(self) -> None:
+        # Issue #69: one-step install fails; README must document
+        # marketplace-add before install, in that order.
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        marketplace = "claude plugin marketplace add alivecontext/alive"
+        install = "claude plugin install alive@alivecontext"
+        self.assertIn(marketplace, readme)
+        self.assertIn(install, readme)
+        self.assertLess(readme.index(marketplace), readme.index(install))
+
+    def test_runtime_instruction_skill_lists_match_the_shipped_plugin(self) -> None:
+        skills_root = ROOT / "plugins" / "alive" / "skills"
+        expected = {path.name for path in skills_root.iterdir() if path.is_dir()}
+        instruction_paths = (
+            ROOT / "plugins" / "alive" / "CLAUDE.md",
+            ROOT / "plugins" / "alive" / "templates" / "world" / "agents.md",
+        )
+
+        for path in instruction_paths:
+            source = path.read_text(encoding="utf-8")
+            declared = set(re.findall(r"(?m)^/alive:([a-z0-9-]+)\s+", source))
+            self.assertEqual(declared, expected, f"{path} skill list has drifted")
+            self.assertNotIn("Nothing phones home", source)
+            self.assertNotIn("Nothing leaves without their say", source)
+            self.assertNotRegex(source, r"(?m)^## (?:Fifteen|Twenty) Skills$")
+
+        subagent = (
+            ROOT / "plugins" / "alive" / "templates" / "subagent-brief.md"
+        ).read_text(encoding="utf-8")
+        preferences = (
+            ROOT / "plugins" / "alive" / "templates" / "world" / "preferences.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn("Personal Context Manager", subagent)
+        self.assertNotIn("entire life context", subagent)
+        self.assertNotIn("share/receive/relay behaviour", preferences)
 
 if __name__ == "__main__":
     unittest.main()

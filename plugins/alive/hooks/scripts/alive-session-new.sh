@@ -129,10 +129,38 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 # "$ALIVE_WORLD_ROOT is set" an unreliable signal that the user
 # pre-set it.
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  echo "ALIVE_SESSION_ID=$SESSION_ID" >> "$CLAUDE_ENV_FILE"
-  echo "ALIVE_WORLD_ROOT=$WORLD_ROOT" >> "$CLAUDE_ENV_FILE"
-  echo "ALIVE_WORLD_ROOT_SOURCE=session" >> "$CLAUDE_ENV_FILE"
-  echo "ALIVE_PLUGIN_ROOT=$PLUGIN_ROOT" >> "$CLAUDE_ENV_FILE"
+  alive_write_env_var "ALIVE_SESSION_ID" "$SESSION_ID" "$CLAUDE_ENV_FILE"
+  alive_write_env_var "ALIVE_WORLD_ROOT" "$WORLD_ROOT" "$CLAUDE_ENV_FILE"
+  alive_write_env_var "ALIVE_WORLD_ROOT_SOURCE" "session" "$CLAUDE_ENV_FILE"
+  alive_write_env_var "ALIVE_PLUGIN_ROOT" "$PLUGIN_ROOT" "$CLAUDE_ENV_FILE"
+fi
+
+# Refresh the plugin-managed world instructions and Claude Code bridge. Older
+# worlds can carry a regular .claude/CLAUDE.md with v2 paths; preserve one
+# backup before replacing it with the canonical v3 template. Symlink where the
+# platform permits it, copy as the cross-platform fallback.
+AGENTS_SRC="$PLUGIN_ROOT/templates/world/agents.md"
+AGENTS_DST="$WORLD_ROOT/.alive/agents.md"
+CLAUDE_BRIDGE="$WORLD_ROOT/.claude/CLAUDE.md"
+CLAUDE_BRIDGE_BACKUP="$WORLD_ROOT/.claude/CLAUDE.md.pre-alive-3.2.1.bak"
+if [ -f "$AGENTS_SRC" ]; then
+  mkdir -p "$WORLD_ROOT/.alive" "$WORLD_ROOT/.claude"
+  if [ ! -f "$AGENTS_DST" ] || ! cmp -s "$AGENTS_SRC" "$AGENTS_DST"; then
+    cp "$AGENTS_SRC" "$AGENTS_DST"
+  fi
+  if [ -f "$CLAUDE_BRIDGE" ] && [ ! -L "$CLAUDE_BRIDGE" ]; then
+    if [ ! -e "$CLAUDE_BRIDGE_BACKUP" ]; then
+      cp -p "$CLAUDE_BRIDGE" "$CLAUDE_BRIDGE_BACKUP"
+    fi
+    rm -f "$CLAUDE_BRIDGE"
+  elif [ -L "$CLAUDE_BRIDGE" ] \
+    && [ "$(readlink "$CLAUDE_BRIDGE" 2>/dev/null || true)" != "../.alive/agents.md" ]; then
+    rm -f "$CLAUDE_BRIDGE"
+  fi
+  if [ ! -e "$CLAUDE_BRIDGE" ] && [ ! -L "$CLAUDE_BRIDGE" ]; then
+    ln -s "../.alive/agents.md" "$CLAUDE_BRIDGE" 2>/dev/null \
+      || cp "$AGENTS_DST" "$CLAUDE_BRIDGE"
+  fi
 fi
 
 # Quick-count rule files (no content reading) so YAML has correct count immediately
@@ -373,6 +401,17 @@ for rule_file in "$PLUGIN_ROOT/rules/"*.md; do
 $(cat "$rule_file")"
   fi
 done
+
+# User-owned rules are canonical input, not plugin-managed state. Load them
+# after the defaults so their documented precedence is real at runtime.
+OVERRIDES_FILE="$WORLD_ROOT/.alive/overrides.md"
+if [ -f "$OVERRIDES_FILE" ]; then
+  RUNTIME_RULES="${RUNTIME_RULES}
+
+<USER_RULE_OVERRIDES>
+$(cat "$OVERRIDES_FILE")
+</USER_RULE_OVERRIDES>"
+fi
 
 # Preamble
 PREAMBLE="<EXTREMELY_IMPORTANT>

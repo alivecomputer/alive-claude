@@ -31,8 +31,8 @@ fi
 # discriminator (T7) that distinguishes "user-set in shell" from
 # "session-mirrored by hook"; both startup and resume must write it.
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  echo "ALIVE_WORLD_ROOT=$WORLD_ROOT" >> "$CLAUDE_ENV_FILE"
-  echo "ALIVE_WORLD_ROOT_SOURCE=session" >> "$CLAUDE_ENV_FILE"
+  alive_write_env_var "ALIVE_WORLD_ROOT" "$WORLD_ROOT" "$CLAUDE_ENV_FILE"
+  alive_write_env_var "ALIVE_WORLD_ROOT_SOURCE" "session" "$CLAUDE_ENV_FILE"
 fi
 
 # Resolve preferences
