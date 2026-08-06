@@ -2,6 +2,23 @@
 
 All notable changes to the ALIVE Context System plugin are documented here.
 
+## [3.2.1] - 2026-08-07
+
+### Fixed
+
+- **Migration boundary:** Live-disk fallback now requires walnut identity before treating a `bundles/` directory as migratable. Generic project folders are not moved.
+- **Resume recovery:** A resumed Claude Code session with a missing squirrel record gets a new exact session record instead of borrowing another active session.
+- **Upgrade warning:** A v3 `02_Life/_kernel` path or unrelated nested `bundles/` directory no longer triggers the v2 migration warning by itself.
+- **Completed task history:** Completed and dropped tasks are listable from history (issue #60).
+- **Release metadata:** README, marketplace, plugin, runtime and walnut product versions agree at 3.2.1. The world schema target remains 3.2.0.
+
+### Changed
+
+- Licence remains MIT.
+- Added a buyer-facing permission declaration covering 14 command invocations across 5 Claude Code hook event types (`PERMISSIONS.md`).
+- The README now shows the complete first-time marketplace registration and plugin installation flow.
+- Claude Code remains the only supported runtime in this release. Codex support is not included; Hermes remains community/experimental.
+
 ## [3.0.0] - 2026-04-04
 
 ### Personal Context Manager

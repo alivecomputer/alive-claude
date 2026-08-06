@@ -1,9 +1,9 @@
 name: "alive"
-description: "Personal Context Manager for Claude Code. Your life in walnuts."
+description: "Local, user-owned context for Claude Code. Keep your work in files you control."
 tags: [pcm, personal-context-manager, ai, claude-code, context, memory, markdown, productivity, alive-context-system]
 author: "Lock-in Lab"
 category: "pcm"
 url: "https://alivecontext.com"
 repo: "https://github.com/alivecontext/alive"
-version: "3.0.0"
+version: "3.2.1"
 license: "MIT"
