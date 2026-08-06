@@ -650,6 +650,20 @@ def _collect_all_tasks(walnut):
     return all_tasks
 
 
+def _clean_manifest_scalar(raw):
+    """Strip surrounding quotes or a trailing YAML inline comment (issue #72)."""
+    raw = raw.strip()
+    if raw[:1] in ('"', "'"):
+        quote = raw[0]
+        end = raw.find(quote, 1)
+        if end != -1:
+            return raw[1:end]
+        raw = raw[1:]
+    if raw.startswith("#"):
+        return ""
+    return re.split(r"\s+#", raw, 1)[0].strip()
+
+
 def _read_manifest_field(manifest_path, field):
     """Read a single field from context.manifest.yaml using regex.
 
@@ -671,12 +685,12 @@ def _read_manifest_field(manifest_path, field):
         return "\n".join(stripped)
 
     # Simple single-line
-    pattern_simple = r'^{field}:\s*["\']?(.*?)["\']?\s*$'.format(
+    pattern_simple = r'^{field}:[ \t]*(.*?)[ \t]*$'.format(
         field=re.escape(field)
     )
     m = re.search(pattern_simple, content, re.MULTILINE)
     if m:
-        return m.group(1)
+        return _clean_manifest_scalar(m.group(1))
 
     return None
 
@@ -1157,7 +1171,13 @@ def cmd_summary(args):
         if not os.path.exists(manifest_path):
             manifest_path = os.path.join(bundle_path, "companion.md")
         goal = _read_manifest_field(manifest_path, "goal") or ""
-        status = _read_manifest_field(manifest_path, "status") or "draft"
+        # Bundle manifests declare their lifecycle as `phase:`; older
+        # manifests may use `status:` (issue #72).
+        status = (
+            _read_manifest_field(manifest_path, "status")
+            or _read_manifest_field(manifest_path, "phase")
+            or "draft"
+        )
         context = _read_manifest_field(manifest_path, "context") or ""
 
         tasks = bundle_tasks.get(bundle_name, [])
@@ -1172,6 +1192,9 @@ def cmd_summary(args):
         for t in tasks:
             p = t.get("priority", "todo")
             s = t.get("status", "todo")
+            # Done/dropped tasks are history, not open work (issue #73).
+            if s in ("done", "dropped"):
+                continue
             if p == "urgent":
                 counts["urgent"] += 1
                 urgent_titles.append(t.get("title", ""))
@@ -1197,7 +1220,11 @@ def cmd_summary(args):
             status_counts[status] += 1
 
         # Determine tier
-        has_urgent = any(t.get("priority") == "urgent" for t in tasks)
+        has_urgent = any(
+            t.get("priority") == "urgent"
+            and t.get("status") not in ("done", "dropped")
+            for t in tasks
+        )
         has_active = any(t.get("status") == "active" for t in tasks)
 
         if has_urgent or has_active:
@@ -1251,6 +1278,9 @@ def cmd_summary(args):
         p = t.get("priority", "todo")
         s = t.get("status", "todo")
         title = t.get("title", "")
+        # Done/dropped tasks are history, not open work (issue #73).
+        if s in ("done", "dropped"):
+            continue
         if p == "urgent":
             unscoped["urgent"].append(title)
             unscoped["counts"]["urgent"] += 1

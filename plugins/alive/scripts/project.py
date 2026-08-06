@@ -253,14 +253,34 @@ def parse_manifest(filepath):
 
     result = {}
 
+    def clean_scalar(raw):
+        """Strip surrounding quotes or a trailing YAML inline comment (issue #72)."""
+        raw = raw.strip()
+        if raw[:1] in ('"', "'"):
+            quote = raw[0]
+            end = raw.find(quote, 1)
+            if end != -1:
+                return raw[1:end]
+            raw = raw[1:]
+        if raw.startswith("#"):
+            return ""
+        return re.split(r"\s+#", raw, 1)[0].strip()
+
     # Simple single-line fields
-    for field in ("goal", "status", "updated", "due"):
+    for field in ("goal", "status", "phase", "updated", "due"):
         m = re.search(
-            r"^{field}:\s*['\"]?(.*?)['\"]?\s*$".format(field=re.escape(field)),
+            r"^{field}:[ \t]*(.*?)[ \t]*$".format(field=re.escape(field)),
             content, re.MULTILINE
         )
         if m:
-            result[field] = m.group(1).strip()
+            value = clean_scalar(m.group(1))
+            if value:
+                result[field] = value
+
+    # Bundle manifests declare their lifecycle as `phase:`; expose it as
+    # `status` so bundles are not pinned to the draft default (issue #72).
+    if "status" not in result and "phase" in result:
+        result["status"] = result["phase"]
 
     # Context field -- may be multi-line block scalar
     ctx_block = re.search(
