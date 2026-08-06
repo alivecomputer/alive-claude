@@ -1,0 +1,42 @@
+name: Validate Repository Policy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "LICENSE"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "PERMISSIONS.md"
+      - "CONTRIBUTING.md"
+      - "walnut.manifest.yaml"
+      - ".claude-plugin/**"
+      - "hermes/**"
+      - "plugins/alive/**"
+      - "scripts/validate-repository.py"
+      - ".github/workflows/validate-repository.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "LICENSE"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "PERMISSIONS.md"
+      - "CONTRIBUTING.md"
+      - "walnut.manifest.yaml"
+      - ".claude-plugin/**"
+      - "hermes/**"
+      - "plugins/alive/**"
+      - "scripts/validate-repository.py"
+      - ".github/workflows/validate-repository.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate licensing and supported surfaces
+        run: python3 scripts/validate-repository.py
