@@ -5,15 +5,15 @@
     "email": "hello@alivecontext.com"
   },
   "metadata": {
-    "description": "Personal Context Manager for Claude Code. Your life in walnuts.",
-    "version": "3.2.0"
+    "description": "Local, user-owned context for Claude Code. Keep your work in files you control.",
+    "version": "3.2.1"
   },
   "plugins": [
     {
       "name": "alive",
       "source": "./plugins/alive",
-      "description": "Personal Context Manager for Claude Code. Your life in walnuts.",
-      "version": "3.2.0"
+      "description": "Local, user-owned context for Claude Code. Keep your work in files you control.",
+      "version": "3.2.1"
     }
   ]
 }

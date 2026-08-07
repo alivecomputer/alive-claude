@@ -23,6 +23,7 @@ _json_val() {
 
 SESSION_ID=$(_json_val "session_id")
 CWD=$(_json_val "cwd")
+TRANSCRIPT_PATH=$(_json_val "transcript_path")
 MODEL=$(_json_val "display_name")
 : "${MODEL:=$(_json_val "model")}"
 
@@ -143,10 +144,27 @@ if [ "$COST" = "\$0.00" ]; then
 fi
 
 # ── WORKING STATUSLINE ──
-# By this point cost > $0.00, so the session-start hook has definitely completed.
+# Cost > $0.00 means model output has begun, but the SessionStart hook can still
+# be finishing its entry write on a synced or slow filesystem.
 
 if [ ! -f "$ENTRY" ]; then
-  echo -e "${YELLOW}${WARN_ICON} alive: session not registered${RESET} ${DIM}${EM_DASH} context not compounding. Check plugin: /alive:world${RESET}"
+  # Cost can become non-zero before a SessionStart hook finishes writing its
+  # entry, especially on synced filesystems. The statusline payload includes
+  # the canonical transcript path, whose mtime gives us a bounded grace window.
+  TRANSCRIPT_AGE=999
+  if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
+    NOW=$(date +%s)
+    MTIME=$(stat -f %m "$TRANSCRIPT_PATH" 2>/dev/null || stat -c %Y "$TRANSCRIPT_PATH" 2>/dev/null || echo 0)
+    if [[ "$MTIME" =~ ^[0-9]+$ ]]; then
+      TRANSCRIPT_AGE=$((NOW - MTIME))
+    fi
+  fi
+
+  if [ "$TRANSCRIPT_AGE" -ge 0 ] && [ "$TRANSCRIPT_AGE" -lt 60 ]; then
+    echo -e "${DIM}${MODEL}${RESET} ${DIM}|${RESET} ${COPPER}${SQ_ICON}${RESET} ${DIM}alive: initialising...${RESET}"
+  else
+    echo -e "${YELLOW}${WARN_ICON} alive: session not registered${RESET} ${DIM}${EM_DASH} context not compounding. Check plugin: /alive:world${RESET}"
+  fi
   exit 0
 fi
 

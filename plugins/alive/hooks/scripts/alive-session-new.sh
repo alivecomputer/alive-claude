@@ -129,10 +129,38 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 # "$ALIVE_WORLD_ROOT is set" an unreliable signal that the user
 # pre-set it.
 if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
-  echo "ALIVE_SESSION_ID=$SESSION_ID" >> "$CLAUDE_ENV_FILE"
-  echo "ALIVE_WORLD_ROOT=$WORLD_ROOT" >> "$CLAUDE_ENV_FILE"
-  echo "ALIVE_WORLD_ROOT_SOURCE=session" >> "$CLAUDE_ENV_FILE"
-  echo "ALIVE_PLUGIN_ROOT=$PLUGIN_ROOT" >> "$CLAUDE_ENV_FILE"
+  alive_write_env_var "ALIVE_SESSION_ID" "$SESSION_ID" "$CLAUDE_ENV_FILE"
+  alive_write_env_var "ALIVE_WORLD_ROOT" "$WORLD_ROOT" "$CLAUDE_ENV_FILE"
+  alive_write_env_var "ALIVE_WORLD_ROOT_SOURCE" "session" "$CLAUDE_ENV_FILE"
+  alive_write_env_var "ALIVE_PLUGIN_ROOT" "$PLUGIN_ROOT" "$CLAUDE_ENV_FILE"
+fi
+
+# Refresh the plugin-managed world instructions and Claude Code bridge. Older
+# worlds can carry a regular .claude/CLAUDE.md with v2 paths; preserve one
+# backup before replacing it with the canonical v3 template. Symlink where the
+# platform permits it, copy as the cross-platform fallback.
+AGENTS_SRC="$PLUGIN_ROOT/templates/world/agents.md"
+AGENTS_DST="$WORLD_ROOT/.alive/agents.md"
+CLAUDE_BRIDGE="$WORLD_ROOT/.claude/CLAUDE.md"
+CLAUDE_BRIDGE_BACKUP="$WORLD_ROOT/.claude/CLAUDE.md.pre-alive-3.2.1.bak"
+if [ -f "$AGENTS_SRC" ]; then
+  mkdir -p "$WORLD_ROOT/.alive" "$WORLD_ROOT/.claude"
+  if [ ! -f "$AGENTS_DST" ] || ! cmp -s "$AGENTS_SRC" "$AGENTS_DST"; then
+    cp "$AGENTS_SRC" "$AGENTS_DST"
+  fi
+  if [ -f "$CLAUDE_BRIDGE" ] && [ ! -L "$CLAUDE_BRIDGE" ]; then
+    if [ ! -e "$CLAUDE_BRIDGE_BACKUP" ]; then
+      cp -p "$CLAUDE_BRIDGE" "$CLAUDE_BRIDGE_BACKUP"
+    fi
+    rm -f "$CLAUDE_BRIDGE"
+  elif [ -L "$CLAUDE_BRIDGE" ] \
+    && [ "$(readlink "$CLAUDE_BRIDGE" 2>/dev/null || true)" != "../.alive/agents.md" ]; then
+    rm -f "$CLAUDE_BRIDGE"
+  fi
+  if [ ! -e "$CLAUDE_BRIDGE" ] && [ ! -L "$CLAUDE_BRIDGE" ]; then
+    ln -s "../.alive/agents.md" "$CLAUDE_BRIDGE" 2>/dev/null \
+      || cp "$AGENTS_DST" "$CLAUDE_BRIDGE"
+  fi
 fi
 
 # Quick-count rule files (no content reading) so YAML has correct count immediately
@@ -374,6 +402,17 @@ $(cat "$rule_file")"
   fi
 done
 
+# User-owned rules are canonical input, not plugin-managed state. Load them
+# after the defaults so their documented precedence is real at runtime.
+OVERRIDES_FILE="$WORLD_ROOT/.alive/overrides.md"
+if [ -f "$OVERRIDES_FILE" ]; then
+  RUNTIME_RULES="${RUNTIME_RULES}
+
+<USER_RULE_OVERRIDES>
+$(cat "$OVERRIDES_FILE")
+</USER_RULE_OVERRIDES>"
+fi
+
 # Preamble
 PREAMBLE="<EXTREMELY_IMPORTANT>
 The following are your core operating rules for the ALIVE Context System. They are MANDATORY -- not suggestions, not defaults, not guidelines. You MUST follow them in every response, every tool call, every session.
@@ -392,11 +431,23 @@ fi
 # Detect v2 patterns that need v3 upgrade
 UPGRADE_NEEDED=""
 if [ -n "$WORLD_ROOT" ]; then
+  # A directory named bundles/ is common in unrelated projects. Treat it as
+  # a v2 marker only when its parent is an identified walnut.
+  LEGACY_BUNDLES_FOUND=""
+  while IFS= read -r key_file; do
+    walnut_root="$(dirname "$(dirname "$key_file")")"
+    if [ -d "$walnut_root/bundles" ]; then
+      LEGACY_BUNDLES_FOUND="1"
+      break
+    fi
+  done < <(find "$WORLD_ROOT" -maxdepth 5 -type f \
+    \( -path "*/_kernel/key.md" -o -path "*/_core/key.md" \) \
+    -print 2>/dev/null)
+
   # Check for v2 indicators
-  if [ -d "$WORLD_ROOT/02_Life/_kernel" ] 2>/dev/null || \
-     find "$WORLD_ROOT" -maxdepth 4 -name "tasks.md" -path "*/_kernel/tasks.md" -print -quit 2>/dev/null | grep -q . || \
+  if find "$WORLD_ROOT" -maxdepth 4 -name "tasks.md" -path "*/_kernel/tasks.md" -print -quit 2>/dev/null | grep -q . || \
      find "$WORLD_ROOT" -maxdepth 4 -type d -name "_generated" -path "*/_kernel/_generated" -print -quit 2>/dev/null | grep -q . || \
-     find "$WORLD_ROOT" -maxdepth 3 -type d -name "bundles" -print -quit 2>/dev/null | grep -q . || \
+     [ -n "$LEGACY_BUNDLES_FOUND" ] || \
      [ -d "$WORLD_ROOT/People" ] 2>/dev/null || \
      [ -d "$WORLD_ROOT/03_Inputs" ] 2>/dev/null; then
     UPGRADE_NEEDED="

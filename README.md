@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://github.com/alivecontext/alive/releases"><img src="https://img.shields.io/badge/version-3.2.0-F97316?style=flat" alt="Version"></a>
+  <a href="https://github.com/alivecontext/alive/releases"><img src="https://img.shields.io/badge/version-3.2.1-F97316?style=flat" alt="Version"></a>
   <a href="https://github.com/alivecontext/alive/stargazers"><img src="https://img.shields.io/github/stars/alivecontext/alive?style=flat&color=F97316&label=Stars" alt="GitHub Stars"></a>
   <a href="https://github.com/alivecontext/alive/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://x.com/ALIVE_context"><img src="https://img.shields.io/badge/𝕏-@ALIVE_context-000000?logo=x&logoColor=white" alt="@ALIVE_context"></a>
@@ -187,7 +187,7 @@ claude plugin install alive@alivecontext
 
 Requires [Claude Code](https://docs.anthropic.com/en/docs/claude-code) + Python 3. Works on macOS, Linux, Windows (WSL).
 
-15 skills, 13 hooks, 6 rule files, templates, and a statusline.
+15 skills, 14 declared command invocations across 5 hook event types, 6 rule files, templates, and a statusline. See the [permission and side-effect declaration](PERMISSIONS.md).
 
 ### Skills
 

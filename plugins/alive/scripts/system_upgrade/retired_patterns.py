@@ -556,14 +556,12 @@ CATALOG: List[RetiredPattern] = [
         pattern_signature=r"^\.alive/overrides\.md$",
         redesign_step_id="T5",
         surface_message=(
-            "Pre-v3 '.alive/overrides.md' (rule-customization buffer). "
-            "v3 routes rule overrides into '.alive/overrides.md' under "
-            "the new schema; the legacy file is preserved by the backup "
-            "tarball before removal."
+            "Canonical v3 '.alive/overrides.md' rule-customization buffer. "
+            "It is user-owned input and must be preserved by cleanup."
         ),
         walkthrough_eligible=False,
         surface_overlap_risk="potentially_surface",
-        cleanup_action="cleanup",
+        cleanup_action="verify_only",
         rewrite_kind=None,
         replacement_template=None,
         rewrite_fn_id=None,
