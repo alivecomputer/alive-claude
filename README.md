@@ -24,6 +24,7 @@
 ---
 
 ```bash
+claude plugin marketplace add alivecontext/alive
 claude plugin install alive@alivecontext
 ```
 
@@ -180,6 +181,7 @@ EXIT ──→ Sign session. Final projection.
 ## Install
 
 ```bash
+claude plugin marketplace add alivecontext/alive
 claude plugin install alive@alivecontext
 ```
 
