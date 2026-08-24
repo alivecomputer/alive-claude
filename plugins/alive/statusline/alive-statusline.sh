@@ -159,7 +159,8 @@ if [ ! -f "$ENTRY" ]; then
   TRANSCRIPT_AGE=999
   if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ]; then
     NOW=$(date +%s)
-    MTIME=$(stat -f %m "$TRANSCRIPT_PATH" 2>/dev/null || stat -c %Y "$TRANSCRIPT_PATH" 2>/dev/null || echo 0)
+    # GNU `stat -c` first: BSD `stat -f` on GNU dumps filesystem info to stdout.
+    MTIME=$(stat -c %Y "$TRANSCRIPT_PATH" 2>/dev/null || stat -f %m "$TRANSCRIPT_PATH" 2>/dev/null || echo 0)
     if [[ "$MTIME" =~ ^[0-9]+$ ]]; then
       TRANSCRIPT_AGE=$((NOW - MTIME))
     fi
