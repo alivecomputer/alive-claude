@@ -155,6 +155,52 @@ class SummaryRegressionTest(unittest.TestCase):
         self.assertEqual(unscoped["urgent"], [])
         self.assertEqual(unscoped["counts"]["todo"], 1)
 
+    def test_issue_73_projection_fallback_excludes_finished_unscoped(self) -> None:
+        """project.py's direct-read fallback must also skip done/dropped.
+
+        assemble() only takes the direct_unscoped fallback path when
+        tasks.py summary's own unscoped counts are all zero (see
+        ``total_unscoped == 0 and direct_unscoped`` in project.py) -- so
+        the repro walnut must hold *only* finished-but-once-urgent tasks
+        at the kernel level (no open unscoped work), or the fallback
+        branch is never reached and this test would pass for the wrong
+        reason regardless of the fix. That's the exact shape of issue #73:
+        a kernel tasks.json holding only finished-but-once-urgent tasks
+        resurfaced as urgent in now.json, reachable through the primary
+        ``project.py --walnut`` path the load skill reads on every
+        session start.
+        """
+        finished_only = Path(self._tmp.name) / "finished-only"
+        kernel = finished_only / "_kernel"
+        kernel.mkdir(parents=True)
+        (kernel / "key.md").write_text("# key\n", encoding="utf-8")
+        (kernel / "tasks.json").write_text(
+            json.dumps(
+                {
+                    "tasks": [
+                        {
+                            "id": "d1",
+                            "title": "was urgent now done",
+                            "priority": "urgent",
+                            "status": "done",
+                        },
+                        {
+                            "id": "d2",
+                            "title": "was urgent now dropped",
+                            "priority": "urgent",
+                            "status": "dropped",
+                        },
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        now = PROJECT.assemble(str(finished_only))
+        unscoped = now["unscoped_tasks"]
+        self.assertEqual(unscoped["counts"]["urgent"], 0)
+        self.assertEqual(unscoped["urgent"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

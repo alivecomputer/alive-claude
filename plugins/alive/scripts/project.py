@@ -658,6 +658,12 @@ def assemble(walnut):
             status = t.get("status", "todo")
             priority = t.get("priority", "todo")
             title = t.get("title", "")
+            # Done/dropped tasks are history, not open work (issue #73).
+            # tasks.py summary already filters these; the direct-read
+            # fallback must apply the same contract or it resurfaces
+            # finished-but-once-urgent tasks as urgent in now.json.
+            if status in ("done", "dropped"):
+                continue
             if priority == "urgent":
                 u_urgent.append(title)
                 u_counts["urgent"] += 1
