@@ -72,44 +72,45 @@ SETTINGS_DIR="$WORLD_ROOT/.claude"
 SETTINGS_FILE="$SETTINGS_DIR/settings.json"
 mkdir -p "$SETTINGS_DIR"
 if [ ! -f "$SETTINGS_FILE" ]; then
+  cmd_json="$(alive_json_encode_string "$WORLD_ROOT/.alive/statusline.sh")"
   cat > "$SETTINGS_FILE" << SETTINGSEOF
 {
   "statusLine": {
     "type": "command",
-    "command": "$WORLD_ROOT/.alive/statusline.sh"
+    "command": $cmd_json
   }
 }
 SETTINGSEOF
 else
   if [ "$ALIVE_JSON_RT" = "python3" ]; then
-    ALIVE_SETTINGS_FILE="$SETTINGS_FILE" ALIVE_WORLD_ROOT="$WORLD_ROOT" python3 -c "
+    ALIVE_SETTINGS_FILE="$SETTINGS_FILE" ALIVE_WORLD_ROOT="$WORLD_ROOT" python3 -c '
 import json, os, sys
-sf = os.environ['ALIVE_SETTINGS_FILE']
-wr = os.environ['ALIVE_WORLD_ROOT']
-expected = wr + '/.alive/statusline.sh'
+sf = os.environ["ALIVE_SETTINGS_FILE"]
+wr = os.environ["ALIVE_WORLD_ROOT"]
+expected = wr + "/.alive/statusline.sh"
 try:
     with open(sf) as f:
         data = json.load(f)
 except (json.JSONDecodeError, ValueError):
     sys.exit(0)
-current = data.get('statusLine', {}).get('command', '')
+current = data.get("statusLine", {}).get("command", "")
 if current != expected:
-    data['statusLine'] = {'type': 'command', 'command': expected}
-    with open(sf, 'w') as f:
+    data["statusLine"] = {"type": "command", "command": expected}
+    with open(sf, "w") as f:
         json.dump(data, f, indent=2)
-        f.write('\n')
-" 2>/dev/null || true
+        f.write("\n")
+' 2>/dev/null || true
   elif [ "$ALIVE_JSON_RT" = "node" ]; then
-    ALIVE_SETTINGS_FILE="$SETTINGS_FILE" ALIVE_WORLD_ROOT="$WORLD_ROOT" node -e "
-const fs=require('fs');
+    ALIVE_SETTINGS_FILE="$SETTINGS_FILE" ALIVE_WORLD_ROOT="$WORLD_ROOT" node -e '
+const fs=require("fs");
 const sf=process.env.ALIVE_SETTINGS_FILE;
 const wr=process.env.ALIVE_WORLD_ROOT;
-const expected=wr+'/.alive/statusline.sh';
+const expected=wr+"/.alive/statusline.sh";
 let data;
-try{data=JSON.parse(fs.readFileSync(sf,'utf8'))}catch(e){process.exit(0)}
-const current=(data.statusLine||{}).command||'';
-if(current!==expected){data.statusLine={type:'command',command:expected};fs.writeFileSync(sf,JSON.stringify(data,null,2)+'\n')}
-" 2>/dev/null || true
+try{data=JSON.parse(fs.readFileSync(sf,"utf8"))}catch(e){process.exit(0)}
+const current=(data.statusLine||{}).command||"";
+if(current!==expected){data.statusLine={type:"command",command:expected};fs.writeFileSync(sf,JSON.stringify(data,null,2)+"\n")}
+' 2>/dev/null || true
   fi
 fi
 

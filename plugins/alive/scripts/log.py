@@ -24,7 +24,8 @@ T6 entry layout (line 2 hash-comment marker added on top of the T5 block):
 
 Lock & hook coexistence
 -----------------------
-The advisory ``fcntl.flock`` lock is acquired on a *separate* lockfile at
+The advisory lock (``fcntl.flock`` on POSIX, ``msvcrt.locking`` on
+native Windows) is acquired on a *separate* lockfile at
 ``_kernel/.log.md.lock`` and wraps ONLY the read-log/validate/compute/
 atomic-write sequence. ``project.py`` and ``generate-index.py`` run
 OUTSIDE the lock so same-walnut concurrent prepends never collide on the
@@ -67,8 +68,6 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import errno
-import fcntl
 import hashlib
 import json
 import os
@@ -76,14 +75,15 @@ import re
 import stat as _stat_mod
 import subprocess
 import sys
-import time
 
 _SCRIPTS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
 from _common import (  # noqa: E402
+    FlockTimeoutError,
     atomic_write_text,
+    flock_file,
     find_world_root,
     iso_now,
     resolve_plugin_root,
@@ -166,8 +166,10 @@ SCHEMA_METADATA = {
 
 SUBPROCESS_STDOUT_LIMIT = 2000
 
-#: Advisory ``fcntl.flock`` total wait budget (seconds) and per-retry sleep.
-#: 5s / 100ms => 50 non-blocking attempts before giving up.
+#: Advisory lock total wait budget (seconds) and per-retry sleep.
+#: 5s / 100ms => 50 non-blocking attempts before giving up. Timing is
+#: owned by ``_common.flock_file``; these names stay as documentation
+#: of the log-prepend contract.
 _LOCK_TIMEOUT_SECONDS = 5.0
 _LOCK_RETRY_INTERVAL = 0.1
 
@@ -837,30 +839,42 @@ def _run_subprocess(cmd, error_code, timeout=None):
 # ---------------------------------------------------------------------------
 
 class _FlockGuard(object):
-    """Context manager wrapping ``fcntl.flock`` on a lockfile fd.
+    """Context manager wrapping ``_common.flock_file`` on a lockfile.
 
-    Acquires ``LOCK_EX | LOCK_NB`` with a bounded retry loop so a blocked
-    writer never stalls longer than ``_LOCK_TIMEOUT_SECONDS``. Releases
-    the lock and closes the fd in ``__exit__``. On acquisition timeout
-    raises :class:`_LogError` with ``code: lock_timeout`` + ``exit 5``.
-
-    The lockfile itself is a zero-byte sentinel; the lock protects *log.md*
-    (which is written via rename and therefore cannot be flock'd directly).
+    Maps lock-backend failures onto :class:`_LogError` so prepend keeps
+    its exit-code contract (permission = 4, timeout = 5). The lockfile
+    is a sentinel; the lock protects *log.md* (written via rename).
     """
 
     def __init__(self, lock_path):
         self._lock_path = lock_path
-        self._fd = None
+        self._ctx = None
 
     def __enter__(self):
-        # O_CLOEXEC so a forked subprocess can't accidentally inherit the
-        # lock holder. O_CREAT so concurrent first-writers both succeed in
-        # creating-or-opening without a TOCTOU race. ``getattr`` guards
-        # against exotic builds that omit O_CLOEXEC (it's POSIX.1-2008
-        # but not universally re-exported through the Python os module).
-        flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_CLOEXEC", 0)
+        ctx = flock_file(
+            self._lock_path,
+            timeout_seconds=_LOCK_TIMEOUT_SECONDS,
+            retry_interval=_LOCK_RETRY_INTERVAL,
+        )
         try:
-            fd = os.open(self._lock_path, flags, 0o644)
+            guard = ctx.__enter__()
+        except FlockTimeoutError as exc:
+            raise _LogError(
+                "lock acquisition timed out after {}s".format(
+                    _LOCK_TIMEOUT_SECONDS
+                ),
+                code=ERROR_LOCK_TIMEOUT,
+                exit_code=5,
+                extra={
+                    "path": self._lock_path,
+                    "hint": (
+                        "another writer held the lock for "
+                        "{}s; retry or investigate".format(
+                            int(_LOCK_TIMEOUT_SECONDS)
+                        )
+                    ),
+                },
+            ) from exc
         except PermissionError as exc:
             raise _LogError(
                 "permission denied opening lockfile {}: {}".format(
@@ -877,60 +891,14 @@ class _FlockGuard(object):
                 code=ERROR_LOG_MALFORMED,
                 exit_code=1,
             ) from exc
-
-        deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
-        while True:
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                self._fd = fd
-                return self
-            except BlockingIOError:
-                pass
-            except OSError as exc:
-                # EWOULDBLOCK on some kernels is distinct from EAGAIN.
-                if exc.errno not in (errno.EAGAIN, errno.EWOULDBLOCK):
-                    os.close(fd)
-                    raise _LogError(
-                        "flock failed on {}: {}".format(
-                            self._lock_path, exc
-                        ),
-                        code=ERROR_LOG_MALFORMED,
-                        exit_code=1,
-                    ) from exc
-            if time.monotonic() >= deadline:
-                os.close(fd)
-                raise _LogError(
-                    "lock acquisition timed out after {}s".format(
-                        _LOCK_TIMEOUT_SECONDS
-                    ),
-                    code=ERROR_LOCK_TIMEOUT,
-                    exit_code=5,
-                    extra={
-                        "path": self._lock_path,
-                        "hint": (
-                            "another writer held the lock for "
-                            "{}s; retry or investigate".format(
-                                int(_LOCK_TIMEOUT_SECONDS)
-                            )
-                        ),
-                    },
-                )
-            time.sleep(_LOCK_RETRY_INTERVAL)
+        self._ctx = ctx
+        return guard
 
     def __exit__(self, exc_type, exc, tb):
-        if self._fd is not None:
-            try:
-                fcntl.flock(self._fd, fcntl.LOCK_UN)
-            except OSError:
-                # Best-effort: if unlock failed, closing the fd implicitly
-                # releases the flock on POSIX. Swallow so we don't mask the
-                # original exception path.
-                pass
-            try:
-                os.close(self._fd)
-            except OSError:
-                pass
-            self._fd = None
+        if self._ctx is not None:
+            ctx = self._ctx
+            self._ctx = None
+            return ctx.__exit__(exc_type, exc, tb)
         return False
 
 

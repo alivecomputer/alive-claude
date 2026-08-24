@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import contextlib
 import errno
-import fcntl
 import hashlib
 import json
 import os
@@ -51,6 +50,19 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
+
+# Native Windows CPython has no fcntl; MSYS/Cygwin Python does. Prefer
+# fcntl when present, msvcrt.locking otherwise. Never silently no-op:
+# a missing backend must fail loud (alive#67).
+try:
+    import fcntl as _fcntl
+except ImportError:
+    _fcntl = None
+
+try:
+    import msvcrt as _msvcrt
+except ImportError:
+    _msvcrt = None
 
 # ---------------------------------------------------------------------------
 # Vendored package bootstrap
@@ -789,7 +801,7 @@ def resolve_session_id(override=None):
 
 
 # ---------------------------------------------------------------------------
-# Advisory file locking (fcntl.flock context manager + ownership token)
+# Advisory file locking (fcntl.flock on POSIX, msvcrt.locking on Windows)
 # ---------------------------------------------------------------------------
 
 #: Default total wait budget (seconds) and per-retry sleep for flock_file.
@@ -798,6 +810,92 @@ def resolve_session_id(override=None):
 #: same backpressure characteristics on contended walnuts.
 _FLOCK_DEFAULT_TIMEOUT_SECONDS = 5.0
 _FLOCK_DEFAULT_RETRY_INTERVAL = 0.1
+
+#: Byte length of the msvcrt.locking region. 1 byte from offset 0 is
+#: enough to serialize writers; the lockfile is a sentinel, not payload.
+_MSVCRT_LOCK_LENGTH = 1
+
+_MSVCRT_BLOCKED_ERRNOS = {
+    errno.EACCES,
+    errno.EAGAIN,
+    getattr(errno, "EWOULDBLOCK", errno.EAGAIN),
+    getattr(errno, "EDEADLOCK", None),
+    getattr(errno, "EDEADLK", None),
+}
+_MSVCRT_BLOCKED_ERRNOS.discard(None)
+
+
+def _msvcrt_prepare_lock_region(fd):
+    """Seek to 0 and ensure at least 1 byte so ``msvcrt.locking`` has a region."""
+    os.lseek(fd, 0, os.SEEK_SET)
+    try:
+        size = os.fstat(fd).st_size
+    except OSError:
+        size = 0
+    if size < 1:
+        os.write(fd, b"\0")
+        os.lseek(fd, 0, os.SEEK_SET)
+
+
+def msvcrt_lock_exclusive_nb(fd, msvcrt_mod=None):
+    """Non-blocking exclusive lock via ``msvcrt.locking``.
+
+    Raises ``BlockingIOError`` when another holder owns the region so
+    the ``flock_file`` retry loop can treat POSIX and Windows the same.
+    *msvcrt_mod* is a test seam (Linux CI has no msvcrt).
+    """
+    mod = _msvcrt if msvcrt_mod is None else msvcrt_mod
+    if mod is None:
+        raise RuntimeError("msvcrt is not available")
+    _msvcrt_prepare_lock_region(fd)
+    try:
+        mod.locking(fd, mod.LK_NBLCK, _MSVCRT_LOCK_LENGTH)
+    except OSError as exc:
+        if getattr(exc, "errno", None) in _MSVCRT_BLOCKED_ERRNOS:
+            raise BlockingIOError from exc
+        raise
+
+
+def msvcrt_unlock(fd, msvcrt_mod=None):
+    """Release the ``msvcrt.locking`` region acquired by :func:`msvcrt_lock_exclusive_nb`."""
+    mod = _msvcrt if msvcrt_mod is None else msvcrt_mod
+    if mod is None:
+        raise RuntimeError("msvcrt is not available")
+    os.lseek(fd, 0, os.SEEK_SET)
+    mod.locking(fd, mod.LK_UNLCK, _MSVCRT_LOCK_LENGTH)
+
+
+def _lock_exclusive_nb(fd):
+    """Acquire a non-blocking exclusive lock on *fd*.
+
+    fcntl.flock on POSIX (including Cygwin/MSYS Python); msvcrt.locking
+    on native Windows. Raises ``BlockingIOError`` on contention. Raises
+    ``RuntimeError`` if neither backend exists -- never a silent no-op.
+    """
+    if _fcntl is not None:
+        _fcntl.flock(fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+        return
+    if _msvcrt is not None:
+        msvcrt_lock_exclusive_nb(fd, _msvcrt)
+        return
+    raise RuntimeError(
+        "file locking requires fcntl (POSIX) or msvcrt (Windows); "
+        "neither module is available"
+    )
+
+
+def _unlock_fd(fd):
+    """Release the exclusive lock on *fd* acquired by :func:`_lock_exclusive_nb`."""
+    if _fcntl is not None:
+        _fcntl.flock(fd, _fcntl.LOCK_UN)
+        return
+    if _msvcrt is not None:
+        msvcrt_unlock(fd, _msvcrt)
+        return
+    raise RuntimeError(
+        "file locking requires fcntl (POSIX) or msvcrt (Windows); "
+        "neither module is available"
+    )
 
 
 class FlockTimeoutError(OSError):
@@ -865,11 +963,12 @@ def flock_file(
     :class:`LockGuard` token.
 
     The lockfile is created (mode ``0o644``) if missing. The lock is
-    acquired with ``LOCK_EX | LOCK_NB`` in a bounded retry loop so a
-    blocked writer never stalls longer than ``timeout_seconds``; on
-    timeout :class:`FlockTimeoutError` is raised. The fd carries the
-    ``O_CLOEXEC`` flag where supported so child processes never inherit
-    the lock holder by accident.
+    acquired non-blocking (fcntl.flock LOCK_EX|LOCK_NB on POSIX,
+    msvcrt.locking LK_NBLCK on native Windows) in a bounded retry loop
+    so a blocked writer never stalls longer than ``timeout_seconds``; on
+    timeout :class:`FlockTimeoutError` is raised. Neither backend is a
+    silent no-op. The fd carries the ``O_CLOEXEC`` flag where supported
+    so child processes never inherit the lock holder by accident.
 
     Parent directories are created as needed. The yielded guard's
     ``path`` is the absolute (`os.path.abspath`) form of *lock_path* so
@@ -894,7 +993,7 @@ def flock_file(
         deadline = time.monotonic() + float(timeout_seconds)
         while True:
             try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _lock_exclusive_nb(fd)
                 break
             except BlockingIOError:
                 pass
@@ -913,7 +1012,7 @@ def flock_file(
             yield guard
         finally:
             try:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+                _unlock_fd(fd)
             except OSError:
                 # Closing the fd implicitly releases the flock on POSIX,
                 # so swallow rather than mask the original exception.

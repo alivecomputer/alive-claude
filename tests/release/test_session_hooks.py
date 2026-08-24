@@ -183,6 +183,37 @@ class SessionHookRegressionTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Always use midnight blue in examples", result.stdout)
 
+    def test_new_session_writes_valid_statusline_settings_json(self) -> None:
+        result = run_hook(
+            "alive-session-new.sh", self.world, "session-settings-json", "startup"
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        settings = self.world / ".claude" / "settings.json"
+        self.assertTrue(settings.is_file(), "SessionStart should create settings.json")
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        command = data["statusLine"]["command"]
+        self.assertTrue(command, "statusLine.command must not be empty")
+        self.assertIn("statusline.sh", command)
+        self.assertIn("bash ", command)
+
+    def test_new_session_settings_json_survives_spaces_in_world_path(self) -> None:
+        spaced_base = self.base / "parent with spaces"
+        spaced_base.mkdir()
+        world = make_world(spaced_base)
+
+        result = run_hook(
+            "alive-session-new.sh", world, "session-settings-spaced", "startup"
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        settings = world / ".claude" / "settings.json"
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        command = data["statusLine"]["command"]
+        self.assertIn("parent with spaces", command)
+        self.assertTrue(command.startswith("bash "))
+
 
 if __name__ == "__main__":
     unittest.main()
+

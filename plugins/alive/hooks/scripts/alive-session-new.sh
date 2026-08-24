@@ -218,11 +218,13 @@ fix_statusline_in_settings() {
   if [ ! -f "$settings_file" ]; then
     # Only create project-level settings, not user-level
     if [ "$settings_file" = "$WORLD_ROOT/.claude/settings.json" ]; then
+      local cmd_json
+      cmd_json="$(alive_json_encode_string "$STATUSLINE_CMD")"
       cat > "$settings_file" << SETTINGSEOF
 {
   "statusLine": {
     "type": "command",
-    "command": $( if [ "$ALIVE_JSON_RT" = "python3" ]; then printf '%s' "$STATUSLINE_CMD" | python3 -c "import sys,json; print(json.dumps(sys.stdin.buffer.read().decode("utf-8","replace")))" 2>/dev/null; elif [ "$ALIVE_JSON_RT" = "node" ]; then printf '%s' "$STATUSLINE_CMD" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.stringify(d)))" 2>/dev/null; else echo "\"$STATUSLINE_CMD\""; fi )
+    "command": $cmd_json
   }
 }
 SETTINGSEOF
@@ -230,49 +232,48 @@ SETTINGSEOF
     return
   fi
 
-  # settings.json exists -- ensure statusLine uses correct .alive/ path with quoting
+  # settings.json exists -- ensure statusLine uses correct .alive/ path with quoting.
+  # python3 -c / node -e are single-quoted so nested quotes stay intact on Git Bash.
   if [ "$ALIVE_JSON_RT" = "python3" ]; then
-    ALIVE_SETTINGS_FILE="$settings_file" ALIVE_WORLD_ROOT="$WORLD_ROOT" python3 -c "
+    ALIVE_SETTINGS_FILE="$settings_file" ALIVE_WORLD_ROOT="$WORLD_ROOT" python3 -c '
 import json, os, sys
-sf = os.environ['ALIVE_SETTINGS_FILE']
-wr = os.environ['ALIVE_WORLD_ROOT']
-# Quoted command handles paths with spaces (iCloud, etc.)
-expected_cmd = 'bash \"' + wr + '/.alive/statusline.sh\"'
+sf = os.environ["ALIVE_SETTINGS_FILE"]
+wr = os.environ["ALIVE_WORLD_ROOT"]
+expected_cmd = "bash \"" + wr + "/.alive/statusline.sh\""
 try:
     with open(sf) as f:
         data = json.load(f)
 except (json.JSONDecodeError, ValueError):
-    print('ALIVE: settings.json is malformed, cannot inject statusLine', file=sys.stderr)
+    print("ALIVE: settings.json is malformed, cannot inject statusLine", file=sys.stderr)
     sys.exit(0)
-current = data.get('statusLine', {}).get('command', '')
-# Fix if: missing, wrong path, stale .walnut/ reference, or unquoted path with spaces
+current = data.get("statusLine", {}).get("command", "")
 needs_fix = (
     current != expected_cmd
     and (
         not current
-        or '.walnut/' in current
-        or ('.alive/statusline.sh' in current and 'bash ' not in current and ' ' in wr)
+        or ".walnut/" in current
+        or (".alive/statusline.sh" in current and "bash " not in current and " " in wr)
     )
 )
 if needs_fix:
-    data['statusLine'] = {'type': 'command', 'command': expected_cmd}
-    with open(sf, 'w') as f:
+    data["statusLine"] = {"type": "command", "command": expected_cmd}
+    with open(sf, "w") as f:
         json.dump(data, f, indent=2)
-        f.write('\n')
-    print('ALIVE: fixed statusLine in ' + sf, file=sys.stderr)
-" 2>/dev/null || true
+        f.write("\n")
+    print("ALIVE: fixed statusLine in " + sf, file=sys.stderr)
+' 2>/dev/null || true
   elif [ "$ALIVE_JSON_RT" = "node" ]; then
-    ALIVE_SETTINGS_FILE="$settings_file" ALIVE_WORLD_ROOT="$WORLD_ROOT" node -e "
-const fs=require('fs');
+    ALIVE_SETTINGS_FILE="$settings_file" ALIVE_WORLD_ROOT="$WORLD_ROOT" node -e '
+const fs=require("fs");
 const sf=process.env.ALIVE_SETTINGS_FILE;
 const wr=process.env.ALIVE_WORLD_ROOT;
-const expected='bash \"'+wr+'/.alive/statusline.sh\"';
+const expected="bash \""+wr+"/.alive/statusline.sh\"";
 let data;
-try{data=JSON.parse(fs.readFileSync(sf,'utf8'))}catch(e){process.exit(0)}
-const current=(data.statusLine||{}).command||'';
-const needsFix=current!==expected&&(!current||current.includes('.walnut/')||(current.includes('.alive/statusline.sh')&&!current.includes('bash ')&&wr.includes(' ')));
-if(needsFix){data.statusLine={type:'command',command:expected};fs.writeFileSync(sf,JSON.stringify(data,null,2)+'\n');console.error('ALIVE: fixed statusLine in '+sf)}
-" 2>/dev/null || true
+try{data=JSON.parse(fs.readFileSync(sf,"utf8"))}catch(e){process.exit(0)}
+const current=(data.statusLine||{}).command||"";
+const needsFix=current!==expected&&(!current||current.includes(".walnut/")||(current.includes(".alive/statusline.sh")&&!current.includes("bash ")&&wr.includes(" ")));
+if(needsFix){data.statusLine={type:"command",command:expected};fs.writeFileSync(sf,JSON.stringify(data,null,2)+"\n");console.error("ALIVE: fixed statusLine in "+sf)}
+' 2>/dev/null || true
   fi
 }
 

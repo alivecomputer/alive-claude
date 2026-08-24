@@ -4,10 +4,32 @@
 # Cross-platform: python3 (Mac/Linux) with node fallback (Windows/all).
 
 # -- Platform detection --
+# SessionStart invokes `bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/alive-session-*.sh`
+# (hooks.json). Git Bash sets OSTYPE itself at startup (typically `msys`;
+# MACHTYPE may still say cygwin) and MSYSTEM=MINGW64. ALIVE_PLATFORM is
+# computed here when the hook sources this file -- Claude does not pass
+# the flag in. If detection misses, the 3.2.1 drive-letter convert never
+# runs and SessionStart reports NO WORLD FOUND (alive#67).
+# Exact `OSTYPE == msys` misses `msys2` and relies on a single automatic
+# variable; also honour prefixes, MSYSTEM, and MACHTYPE.
+_alive_is_windows_shell() {
+  case "${OSTYPE:-}" in
+    msys*|cygwin*|win32*|mingw*) return 0 ;;
+  esac
+  case "${MSYSTEM:-}" in
+    MINGW*|MSYS*|UCRT*|CLANG*) return 0 ;;
+  esac
+  case "${MACHTYPE:-}" in
+    *mingw*|*msys*|*cygwin*) return 0 ;;
+  esac
+  return 1
+}
+
 ALIVE_PLATFORM="unix"
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
+if _alive_is_windows_shell; then
   ALIVE_PLATFORM="windows"
 fi
+export ALIVE_PLATFORM
 
 # Append a shell-safe assignment to Claude Code's environment handoff file.
 # The file is evaluated by the user's shell, so raw paths containing spaces,
@@ -40,6 +62,28 @@ elif command -v py &>/dev/null && py -3 -c "" &>/dev/null 2>&1; then
 elif command -v node &>/dev/null; then
   ALIVE_JSON_RT="node"
 fi
+
+# JSON-encode a string (including the surrounding quotes).
+# Uses single-quoted python3 -c / node -e so nested double quotes cannot
+# empty the expansion on Git Bash / MINGW64. The SessionStart statusline
+# injector used a double-quoted python3 -c '...decode("utf-8"...)' one-liner
+# that expands to nothing on Windows and writes `"command":` with no value
+# (malformed .claude/settings.json; alive#67 follow-on).
+alive_json_encode_string() {
+  local _alive_json_in="$1"
+  if [ "$ALIVE_JSON_RT" = "python3" ]; then
+    printf '%s' "$_alive_json_in" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.buffer.read().decode("utf-8","replace")))'
+    return $?
+  fi
+  if [ "$ALIVE_JSON_RT" = "node" ]; then
+    printf '%s' "$_alive_json_in" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>console.log(JSON.stringify(d)))'
+    return $?
+  fi
+  local escaped
+  escaped="${_alive_json_in//\\/\\\\}"
+  escaped="${escaped//\"/\\\"}"
+  printf '"%s"\n' "$escaped"
+}
 
 # -- JSON parsing helpers --
 # All JSON parsing goes through python3 or node. Never sed/regex.
@@ -548,6 +592,9 @@ lexical_normalize_path() {
   # Python resolver persists paths such as ``C:\Users\Ada\alive``. Convert
   # that one drive-letter shape to the MSYS mount form before the POSIX
   # absolute-path check so both resolver halves accept the same config value.
+  # Gated on ALIVE_PLATFORM, which SessionStart sets by sourcing this file
+  # (hooks.json runs `bash .../alive-session-new.sh`; Claude does not pass
+  # the flag). Detection is at the top of this file.
   if [ "$ALIVE_PLATFORM" = "windows" ] \
     && [[ "${p:0:1}" == [A-Za-z] ]] \
     && [ "${p:1:1}" = ":" ] \
