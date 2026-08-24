@@ -13,6 +13,7 @@
 
 ## Verification
 
+- [ ] `python3 -m unittest discover -s tests/release` passes
 - [ ] Tested against a real walnut (not just a scaffold)
 - [ ] Backward compatible — existing walnuts still load correctly
 - [ ] Templates match any schema changes

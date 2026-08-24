@@ -1,0 +1,36 @@
+name: Release Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  release-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install zsh
+        run: sudo apt-get update && sudo apt-get install -y zsh
+
+      - name: Run release tests
+        run: python3 -m unittest discover -s tests/release -v
+
+  hermes-offline:
+    # Offline installer tests. Pytest is an extra dep; this job must not
+    # fail the repository if the suite cannot run.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pytest
+        run: python3 -m pip install --user pytest
+
+      - name: Run offline Hermes installer tests
+        run: python3 -m pytest hermes/tests -q

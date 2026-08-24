@@ -25,6 +25,26 @@ plugins/alive/
   CLAUDE.md       the core runtime definition
 ```
 
+## How we ship
+
+Public [`alive`](https://github.com/alivecontext/alive) `main` is the only product trunk. Users install from tags on this repo.
+
+All shippable work is a branch + PR into `main`. Name branches `fix/…` or `feat/…`.
+
+- CI must pass. Release tests are required, not optional:
+
+  ```bash
+  python3 -m unittest discover -s tests/release
+  ```
+
+  That suite needs `zsh` for the env-file quoting checks.
+
+- Close the GitHub issue in the same PR that ships the fix. Do not leave "fixed in 3.2.x" issues open.
+
+`alivecontext/alive-staging` is private scratch for unreleased/untested work (surface UI, license experiments, papers). It is not the product trunk. Do not land reliability fixes only there. Promote only named cherry-picks, never a bulk 78-commit dump.
+
+Claude Code is the only supported runtime in this release. Do not claim Hermes, MCP, or Codex as shipped.
+
 ## Making Changes
 
 ### Skills
@@ -52,7 +72,7 @@ Templates in `plugins/alive/templates/` define the schema for system files. The 
 
 - Keep PRs focused on a single change
 - Describe what changed and why
-- Reference any related issues
+- Close the related GitHub issue from the same PR (`Closes #N`)
 
 ## Reporting Issues
 

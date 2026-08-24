@@ -290,6 +290,8 @@ ALIVE is open source. As you use it, the plugin will surface a small invitation 
 
 ## Contributing
 
+`main` on this repo is the product trunk. Open a `fix/…` or `feat/…` PR; CI and release tests must pass. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 [Open an issue](https://github.com/alivecontext/alive/issues) · [Discussions](https://github.com/alivecontext/alive/discussions) · [Contributing guide](CONTRIBUTING.md)
 
 ---
