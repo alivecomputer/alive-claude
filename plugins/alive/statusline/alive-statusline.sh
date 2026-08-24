@@ -6,10 +6,15 @@
 INPUT=$(cat 2>/dev/null || echo '{}')
 
 # ── Platform detection ──
+# Same prefix + MSYSTEM rules as alive-common.sh (alive#67). Statusline
+# is a standalone script and does not source the hook common file.
 ALIVE_PLATFORM="unix"
-if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || "$OSTYPE" == "win32" ]]; then
-  ALIVE_PLATFORM="windows"
-fi
+case "${OSTYPE:-}" in
+  msys*|cygwin*|win32*|mingw*) ALIVE_PLATFORM="windows" ;;
+esac
+case "${MSYSTEM:-}" in
+  MINGW*|MSYS*|UCRT*|CLANG*) ALIVE_PLATFORM="windows" ;;
+esac
 
 # ── Pure bash JSON extraction ──
 _json_val() {

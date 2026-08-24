@@ -65,6 +65,7 @@ __all__ = (
     "read_world_root_file",
     "write_world_root_file",
     "lexical_normalize_path",
+    "windows_drive_to_msys",
 )
 
 
@@ -137,6 +138,35 @@ class WorldRootStatus(str, enum.Enum):
 # ---------------------------------------------------------------------------
 
 
+def windows_drive_to_msys(path: str):
+    """Convert a native Windows drive path to the MSYS / Git Bash mount form.
+
+    ``C:\\Users\\Ada\\world`` and ``C:/Users/Ada/world`` both become
+    ``/c/Users/Ada/world``. Mixed separators in the rest are folded to
+    ``/``. Returns ``None`` when *path* is not a drive-letter path so
+    POSIX inputs pass through unchanged.
+
+    This is the Python sibling of the bash convert in
+    ``alive-common.sh::lexical_normalize_path``. It is intentionally
+    NOT applied inside :func:`lexical_normalize_path`: that function
+    feeds ``write_world_root_file``, and on native Windows
+    ``alive doctor`` must persist ``C:\\...`` so Python ``os.path``
+    keeps treating the config as absolute. Bash converts at resolve
+    time; the stored value stays Python-native (alive#67).
+    """
+    if not path or len(path) < 3:
+        return None
+    drive = path[0]
+    if not drive.isalpha() or path[1] != ":":
+        return None
+    if path[2] not in ("\\", "/"):
+        return None
+    rest = path[3:].replace("\\", "/").lstrip("/")
+    if rest:
+        return "/" + drive.lower() + "/" + rest
+    return "/" + drive.lower()
+
+
 def lexical_normalize_path(path) -> str:
     """Lexically normalize a path. Pure string op (no fs touches).
 
@@ -153,6 +183,11 @@ def lexical_normalize_path(path) -> str:
            composition the spec calls for.
         6. Collapse a leading ``//`` (POSIX-preserved by ``normpath``)
            to ``/`` so the bash sibling stays in parity.
+
+    Windows drive-letter inputs are left to ``os.path`` on native
+    Windows (so doctor persists ``C:\\...``). The bash sibling converts
+    them to ``/c/...`` at resolve time via :func:`windows_drive_to_msys`
+    semantics; do not fold that convert in here.
 
     Returns the normalized path string. Raises ``ValueError`` for the
     rejection cases.
