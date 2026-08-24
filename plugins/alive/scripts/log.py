@@ -68,7 +68,6 @@ from __future__ import annotations
 
 import argparse
 import errno
-import fcntl
 import hashlib
 import json
 import os
@@ -83,8 +82,12 @@ if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
 from _common import (  # noqa: E402
+    LOCK_EX,
+    LOCK_NB,
+    LOCK_UN,
     atomic_write_text,
     find_world_root,
+    flock,
     iso_now,
     resolve_plugin_root,
     resolve_session_id,
@@ -881,7 +884,7 @@ class _FlockGuard(object):
         deadline = time.monotonic() + _LOCK_TIMEOUT_SECONDS
         while True:
             try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                flock(fd, LOCK_EX | LOCK_NB)
                 self._fd = fd
                 return self
             except BlockingIOError:
@@ -920,7 +923,7 @@ class _FlockGuard(object):
     def __exit__(self, exc_type, exc, tb):
         if self._fd is not None:
             try:
-                fcntl.flock(self._fd, fcntl.LOCK_UN)
+                flock(self._fd, LOCK_UN)
             except OSError:
                 # Best-effort: if unlock failed, closing the fd implicitly
                 # releases the flock on POSIX. Swallow so we don't mask the

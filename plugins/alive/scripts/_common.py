@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import contextlib
 import errno
-import fcntl
 import hashlib
 import json
 import os
@@ -792,6 +791,48 @@ def resolve_session_id(override=None):
 # Advisory file locking (fcntl.flock context manager + ownership token)
 # ---------------------------------------------------------------------------
 
+# fcntl isn't available on native Windows (MSYS/Git Bash python3 still
+# lacks it). msvcrt.locking() is the closest equivalent but locks a byte
+# range rather than the whole file and signals contention differently.
+# Every caller here locks a dedicated sentinel file, never the data file
+# itself, so locking a single byte at offset 0 is sufficient and keeps
+# every call site below unchanged (LOCK_EX/LOCK_NB/LOCK_UN + flock()).
+try:
+    import fcntl as _fcntl
+
+    LOCK_EX = _fcntl.LOCK_EX
+    LOCK_NB = _fcntl.LOCK_NB
+    LOCK_UN = _fcntl.LOCK_UN
+
+    def flock(fd, flags):
+        _fcntl.flock(fd, flags)
+
+except ImportError:  # pragma: no cover - native Windows only
+    import msvcrt as _msvcrt
+
+    LOCK_EX = 1
+    LOCK_NB = 2
+    LOCK_UN = 4
+
+    def flock(fd, flags):
+        pos = os.lseek(fd, 0, os.SEEK_CUR)
+        os.lseek(fd, 0, os.SEEK_SET)
+        try:
+            if flags & LOCK_UN:
+                mode = _msvcrt.LK_UNLCK
+            elif flags & LOCK_NB:
+                mode = _msvcrt.LK_NBLCK
+            else:
+                mode = _msvcrt.LK_LOCK
+            try:
+                _msvcrt.locking(fd, mode, 1)
+            except OSError as exc:
+                if (flags & LOCK_NB) and not (flags & LOCK_UN):
+                    raise BlockingIOError(errno.EAGAIN, str(exc)) from exc
+                raise
+        finally:
+            os.lseek(fd, pos, os.SEEK_SET)
+
 #: Default total wait budget (seconds) and per-retry sleep for flock_file.
 #: 5s / 100ms => 50 non-blocking attempts before giving up. Tuned to match
 #: the log.py lock acquisition timing so promote.py and tasks.py share the
@@ -894,7 +935,7 @@ def flock_file(
         deadline = time.monotonic() + float(timeout_seconds)
         while True:
             try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                flock(fd, LOCK_EX | LOCK_NB)
                 break
             except BlockingIOError:
                 pass
@@ -913,7 +954,7 @@ def flock_file(
             yield guard
         finally:
             try:
-                fcntl.flock(fd, fcntl.LOCK_UN)
+                flock(fd, LOCK_UN)
             except OSError:
                 # Closing the fd implicitly releases the flock on POSIX,
                 # so swallow rather than mask the original exception.

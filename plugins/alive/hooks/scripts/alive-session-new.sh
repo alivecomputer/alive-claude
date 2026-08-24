@@ -222,7 +222,7 @@ fix_statusline_in_settings() {
 {
   "statusLine": {
     "type": "command",
-    "command": $( if [ "$ALIVE_JSON_RT" = "python3" ]; then printf '%s' "$STATUSLINE_CMD" | python3 -c "import sys,json; print(json.dumps(sys.stdin.buffer.read().decode("utf-8","replace")))" 2>/dev/null; elif [ "$ALIVE_JSON_RT" = "node" ]; then printf '%s' "$STATUSLINE_CMD" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.stringify(d)))" 2>/dev/null; else echo "\"$STATUSLINE_CMD\""; fi )
+    "command": $( if [ "$ALIVE_JSON_RT" = "python3" ]; then printf '%s' "$STATUSLINE_CMD" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.buffer.read().decode("utf-8","replace")))' 2>/dev/null; elif [ "$ALIVE_JSON_RT" = "node" ]; then printf '%s' "$STATUSLINE_CMD" | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>console.log(JSON.stringify(d)))" 2>/dev/null; else echo "\"$STATUSLINE_CMD\""; fi )
   }
 }
 SETTINGSEOF
