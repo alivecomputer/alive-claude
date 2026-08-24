@@ -52,7 +52,7 @@ Templates in `plugins/alive/templates/` define the schema for system files. The 
 
 - Keep PRs focused on a single change
 - Describe what changed and why
-- Reference any related issues
+- Close the related GitHub issue from the same PR (`Closes #N`)
 
 ## Reporting Issues
 
